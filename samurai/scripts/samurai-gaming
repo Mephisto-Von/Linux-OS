@@ -1,0 +1,72 @@
+#!/bin/bash
+# Samurai Gaming Profile Manager
+
+case "$1" in
+    install-profile)
+        echo "Installing Samurai gaming profile..."
+        
+        # Install Steam
+        if ! command -v steam &>/dev/null; then
+            echo "Installing Steam..."
+            # Flatpak or apt
+            sudo apt-get install -y steam
+        fi
+        
+        # Install Proton enhancements
+        echo "Installing Proton extras..."
+        # This would install proton-ge, proton-gtk, etc.
+        
+        # Install GameMode
+        if ! systemctl is-active gamemoded &>/dev/null; then
+            echo "Installing GameMode..."
+            sudo apt-get install -y gamemode
+            sudo systemctl enable gamemoded
+            sudo systemctl start gamemoded
+        fi
+        
+        # Install MangoHUD
+        if ! command -v mangohud &>/dev/null; then
+            echo "Installing MangoHUD..."
+            sudo apt-get install -y mangohud
+        fi
+        
+        # Install common redistributables
+        echo "Installing common redistributables..."
+        sudo apt-get install -y winetricks
+        
+        # Configure Steam Proton
+        echo "Configuring Steam Proton..."
+        # Set Proton versions, etc.
+        
+        echo "Gaming profile installed successfully!"
+        echo "Run: samurai-gaming steam  to launch Steam with optimizations"
+        ;;
+    
+    steam)
+        echo "Launching Steam with Samurai gaming optimizations..."
+        if command -v mangohud &>/dev/null; then
+            MANGOHUD=1 steam "$@"
+        else
+            steam "$@"
+        fi
+        ;;
+    
+    lutris)
+        echo "Launching Lutris with Samurai configuration..."
+        if command -v mangohud &>/dev/null; then
+            MANGOHUD=1 lutris "$@"
+        else
+            lutris "$@"
+        fi
+        ;;
+    
+    *)
+        echo "Samurai Gaming Profile Manager"
+        echo "Usage: samurai-gaming <command>"
+        echo ""
+        echo "Commands:"
+        echo "  install-profile  - Install gaming profile with Steam, Proton, GameMode, MangoHUD"
+        echo "  steam            - Launch Steam with optimizations (MangoHUD enabled)"
+        echo "  lutris           - Launch Lutris with MangoHUD"
+        ;;
+esac

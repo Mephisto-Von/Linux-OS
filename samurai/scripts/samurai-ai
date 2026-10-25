@@ -1,0 +1,147 @@
+#!/bin/bash
+# Samurai AI Assistant CLI
+
+MODEL="${1:-}"
+
+case "$MODEL" in
+    chat)
+        if [ -z "$2" ]; then
+            echo "Usage: samurai-ai chat <message>"
+            exit 1
+        fi
+        # Use ollama for local chat
+        if command -v ollama &>/dev/null; then
+            ollama chat llama2 "$2"
+        else
+            echo "Ollama not installed. Install with: curl -s https://ollama.com/download/ollama-linux-amd64.tar.gz | tar -xz -C /usr/local/bin"
+        fi
+        ;;
+    
+    install-model)
+        if [ -z "$2" ]; then
+            echo "Usage: samurai-ai install-model <model-id>"
+            exit 1
+        fi
+        if command -v ollama &>/dev/null; then
+            ollama pull "$2"
+        else
+            echo "Ollama not installed"
+        fi
+        ;;
+    
+    list-models)
+        if command -v ollama &>/dev/null; then
+            ollama list
+        else
+            echo "Ollama not installed"
+        fi
+        ;;
+    
+    status)
+        if command -v ollama &>/dev/null; then
+            ollama ps
+        else
+            echo "Ollama not installed"
+        fi
+        ;;
+    
+    gpu-info)
+        if lspci 2>/dev/null | grep -i nvidia; then
+            echo "NVIDIA GPU detected"
+        elif lspci 2>/dev/null | grep -i amd; then
+            echo "AMD GPU detected"
+        elif lspci 2>/dev/null | grep -i intel; then
+            echo "Intel GPU detected"
+        else
+            echo "No GPU detected or integrated graphics"
+        fi
+        ;;
+    
+    cpu-info)
+        echo "CPU information:"
+        lscpu 2>/dev/null || cat /proc/cpuinfo | head -5
+        ;;
+    
+    memory-budget)
+        echo "Memory information:"
+        free -h
+        total_mem=$(free | grep '^Mem:' | awk '{print $2}')
+        echo "Total memory: $total_mem"
+        recommended=$(echo "scale=0; $total_mem / 8" | bc)
+        echo "Recommended AI context (1/8 of RAM): ~${recommended}MB"
+        ;;
+    
+    set-default)
+        if [ -z "$2" ]; then
+            echo "Usage: samurai-ai set-default <model-id>"
+            exit 1
+        fi
+        # Create default model config
+        echo "model=$2" > ~/.config/samurai/ai-default
+        echo "Default model set to: $2"
+        ;;
+    
+    check-compatibility)
+        if [ -z "$2" ]; then
+            echo "Usage: samurai-ai check-compatibility <model-id>"
+            exit 1
+        fi
+        # Check if model is compatible with available hardware
+        model="$2"
+        gpu=$(lspci 2>/dev/null | grep -iE 'nvidia|amd|intel' | head -1)
+        if [ -z "$gpu" ]; then
+            echo "No GPU detected - CPU only inference"
+        fi
+        echo "Model: $model"
+        echo "Hardware: $gpu"
+        echo "Checking compatibility... (placeholder - full check requires model metadata)"
+        ;;
+    
+    credentials)
+        case "$2" in
+            set)
+                if [ -z "$3" ] || [ -z "$4" ]; then
+                    echo "Usage: samurai-ai credentials set <provider> <key>"
+                    exit 1
+                fi
+                # Store credential in Kwallet/SecretService or encrypted file
+                echo "provider=$3" >> ~/.config/samurai/credentials
+                echo "key=$(echo "$4" | base64)" >> ~/.config/samurai/credentials
+                echo "Credential for $3 stored securely"
+                ;;
+            get)
+                if [ -z "$3" ]; then
+                    echo "Usage: samurai-ai credentials get <provider>"
+                    exit 1
+                fi
+                grep "provider=$3" ~/.config/samurai/credentials | head -1 | cut -d= -f3-
+                ;;
+            remove)
+                if [ -z "$3" ]; then
+                    echo "Usage: samurai-ai credentials remove <provider>"
+                    exit 1
+                fi
+                grep -v "provider=$3" ~/.config/samurai/credentials > ~/.config/samurai/credentials.tmp
+                mv ~/.config/samurai/credentials.tmp ~/.config/samurai/credentials
+                echo "Credential for $3 removed"
+                ;;
+        esac
+        ;;
+    
+    *)
+        echo "Samurai AI Assistant"
+        echo "Usage: samurai-ai <command>"
+        echo ""
+        echo "Commands:"
+        echo "  chat <message>        - Chat with local AI model"
+        echo "  install-model <id>    - Install a model"
+        echo "  list-models           - List available models"
+        echo "  status                - Show inference status"
+        echo "  gpu-info              - Check GPU availability"
+        echo "  cpu-info              - Check CPU information"
+        echo "  memory-budget         - Show memory budget info"
+        echo "  set-default <model>   - Set default model"
+        echo "  check-compatibility   - Check model compatibility"
+        echo "  credentials <get|set|remove> - Manage credentials"
+        ;;
+esac

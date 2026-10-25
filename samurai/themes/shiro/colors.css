@@ -1,0 +1,19 @@
+/* Samurai Linux Shiro (Light) Theme */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400,700&display=swap');
+
+:root {
+    --samurai-background: #F5F0E6;
+    --samurai-panel: #ECE5D8;
+    --samurai-surface: #FFFDF8;
+    --samurai-primary-text: #242321;
+    --samurai-secondary-text: #686258;
+    --samurai-vermilion: #B52832;
+    --samurai-gold: #96733B;
+    --samurai-borders: #D8D0C2;
+    --samurai-accent: #B52832;
+}
+
+/* Font family */
+* {
+    font-family: 'Noto Sans JP', sans-serif;
+}

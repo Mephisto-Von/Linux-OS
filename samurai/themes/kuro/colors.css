@@ -1,0 +1,19 @@
+/* Samurai Linux Kuro (Dark) Theme */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400,700&display=swap');
+
+:root {
+    --samurai-background: #111214;
+    --samurai-panel: #1B1D20;
+    --samurai-surface: #25272B;
+    --samurai-primary-text: #F2EEE5;
+    --samurai-secondary-text: #B8B4AC;
+    --samurai-crimson: #B52832;
+    --samurai-gold: #B89A59;
+    --samurai-borders: #383A3D;
+    --samurai-accent: #B52832;
+}
+
+/* Font family */
+* {
+    font-family: 'Noto Sans JP', sans-serif;
+}

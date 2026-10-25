@@ -1,0 +1,85 @@
+#!/bin/bash
+# Samurai Theme Manager
+
+KURO_THEME="/opt/samurai/themes/kuro"
+SHIRO_THEME="/opt/samurai/themes/shiro"
+
+case "$1" in
+    kuro)
+        echo "Setting Samurai Kuro (dark) theme..."
+        
+        # Apply KDE colorscheme
+        if [ -f "$KURO_THEME/colors.css" ]; then
+            # Copy colorscheme to KDE share
+            mkdir -p ~/.local/share/kde-colorschemes/
+            cp "$KURO_THEME/colors.css" ~/.local/share/kde-colorschemes/samurai-kuro.colors
+            echo "Kuro colorscheme installed"
+        fi
+        
+        # Set cursor theme if available
+        if [ -f "$KURO_THEME/cursor.tar.gz" ]; then
+            # tar -xzf "$KURO_THEME/cursor.tar.gz" -C /usr/share/icons/
+            echo "Cursor theme would be applied"
+        fi
+        
+        # Apply boot/grub branding
+        echo "Samurai Kuro theme applied"
+        echo "Background: #111214"
+        echo "Panels: #1B1D20"
+        echo "Elevated surfaces: #25272B"
+        echo "Primary text: #F2EEE5"
+        echo "Crimson accent: #B52832"
+        echo "Gold accent: #B89A59"
+        ;;
+    
+    shiro)
+        echo "Setting Samurai Shiro (light) theme..."
+        
+        # Apply KDE colorscheme
+        if [ -f "$SHIRO_THEME/colors.css" ]; then
+            mkdir -p ~/.local/share/kde-colorschemes/
+            cp "$SHIRO_THEME/colors.css" ~/.local/share/kde-colorschemes/samurai-shiro.colors
+            echo "Shiro colorscheme installed"
+        fi
+        
+        # Apply boot/grub branding
+        echo "Samurai Shiro theme applied"
+        echo "Background: #F5F0E6"
+        echo "Panels: #ECE5D8"
+        echo "Elevated surfaces: #FFFDF8"
+        echo "Primary text: #242321"
+        echo "Vermilion accent: #B52832"
+        echo "Gold accent: #96733B"
+        ;;
+    
+    auto)
+        echo "Setting automatic theme switching..."
+        # Detect time of day and switch accordingly
+        hour=$(date +%H)
+        if [ "$hour" -ge 6 ] && [ "$hour" -lt 18 ]; then
+            samurai-theme shiro
+            echo "Day mode: Shiro (light)"
+        else
+            samurai-theme kuro
+            echo "Night mode: Kuro (dark)"
+        fi
+        ;;
+    
+    list)
+        echo "Available Samurai themes:"
+        echo "  kuro  - Dark theme (background: #111214)"
+        echo "  shiro - Light theme (background: #F5F0E6)"
+        echo "  auto  - Automatic light/dark switching"
+        ;;
+    
+    *)
+        echo "Samurai Theme Manager"
+        echo "Usage: samurai-theme <command>"
+        echo ""
+        echo "Commands:"
+        echo "  kuro   - Set dark theme (Kuro)"
+        echo "  shiro  - Set light theme (Shiro)"
+        echo "  auto   - Automatic light/dark switching"
+        echo "  list   - List available themes"
+        ;;
+esac
