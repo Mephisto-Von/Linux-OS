@@ -1,0 +1,27 @@
+# Samurai Linux
+
+A Debian-based operating system combining AI-assisted computing, software development, cybersecurity, gaming, daily desktop productivity, privacy, and high performance.
+
+## Edition
+**Samurai Linux** - Japanese Samurai themed, KDE Plasma desktop
+
+## Editions
+- **Kuro (Dark)**: `#111214` theme
+- **Shiro (Light)**: `#F5F0E6` theme
+
+## Purpose
+Developer OS with AI integration, gaming support, and secure defaults.
+
+## Quick Links
+- [Architecture](docs/architecture.md)
+- [Build Guide](docs/build-guide.md)
+- [Security](docs/security.md)
+- [AI System](docs/ai-system.md)
+- [Developer Environment](docs/developer-environment.md)
+- [Gaming](docs/gaming.md)
+- [Performance](docs/performance.md)
+- [Desktop & Themes](docs/desktop-and-themes.md)
+- [Installation](docs/installation.md)
+- [Testing](docs/testing.md)
+- [Release Process](docs/release-process.md)
+- [Known Limitations](docs/known-limitations.md)
