@@ -60,13 +60,24 @@ jobs:
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            qemu-system-x86 xorriso squashfs-tools
+            qemu-system-x86 xorriso squashfs-tools python3-pil
 
       - name: Verify ISO contents
         run: |
           iso=$(find dist -maxdepth 1 -name '*.iso' -print -quit)
           test -n "$iso"
           bash build/verify-iso.sh "$iso"
+
+      - name: Extract boot configuration
+        run: |
+          iso=$(find dist -maxdepth 1 -name '*.iso' -print -quit)
+          test -n "$iso"
+          mkdir -p build/boot-config
+          for path in isolinux boot/grub; do
+            xorriso -osirrox on -indev "$iso" \
+              -extract "/$path" "build/boot-config/$path" >/dev/null || true
+          done
+          find build/boot-config -maxdepth 2 -type f -print
 
       - name: Boot-test ISO in QEMU
         env:
@@ -75,6 +86,26 @@ jobs:
           iso=$(find dist -maxdepth 1 -name '*.iso' -print -quit)
           test -n "$iso"
           bash build/qemu-test.sh "$iso"
+
+      - name: Convert QEMU screenshot
+        if: always()
+        run: |
+          if [ -f build/qemu-screen.ppm ]; then
+            python3 -c 'from PIL import Image; Image.open("build/qemu-screen.ppm").save("build/qemu-screen.png")'
+          fi
+
+      - name: Upload QEMU diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-diagnostics
+          path: |
+            build/qemu-serial.log
+            build/qemu-screen.ppm
+            build/qemu-screen.png
+            build/boot-config
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4

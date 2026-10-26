@@ -1,0 +1,13 @@
+#!/bin/sh
+# Ensure the live kernel writes to the serial console for headless testing.
+# live-build already passes --bootappend-live; this is a safety net for
+# bootloader configurations that drop the console= arguments.
+set -eu
+
+for cfg in isolinux/live.cfg boot/grub/grub.cfg; do
+    [ -f "$cfg" ] || continue
+    if grep -q 'console=ttyS0' "$cfg"; then
+        continue
+    fi
+    sed -i -E 's/^(append|linux)([[:space:]].*)$/\1\2 console=ttyS0,115200n8/' "$cfg"
+done

@@ -13,11 +13,16 @@ build/config/source
 build/config/hooks/live/
 build/config/hooks/normal/*
 !build/config/hooks/normal/0100-samurai.hook.chroot
+!build/config/hooks/normal/0100-serial.hook.binary
 build/config/package-lists/live.list.chroot
 build/config/includes.chroot/usr/local/bin/
 build/config/includes.chroot/usr/share/samurai/themes/
 build/build.log
 build/qemu-serial.log
+build/qemu-screen.ppm
+build/qemu-screen.png
+build/qemu-monitor.sock
+build/boot-config/
 build/live-image-*
 build/*.iso
 build/*.contents
