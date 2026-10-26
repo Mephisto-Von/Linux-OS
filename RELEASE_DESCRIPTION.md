@@ -1,5 +1,11 @@
 # Samurai Linux - Release Build Description
-## Current State and Continuation Instructions
+
+> **Historical document.** This records the original Codespace attempt. The
+> `debootstrap`/`xorriso` commands below are superseded and some were invalid
+> (for example `debootstrap --arch=x86_64` and `xorriso -as iso`). Use
+> [`build/README.md`](build/README.md) and `build/build.sh` instead.
+
+## Historical State and Continuation Instructions
 
 ### Build Environment Status
 - **Current system**: Codespace environment (32GB disk, 2.3GB free, 7.8GB RAM total, 174MB free)

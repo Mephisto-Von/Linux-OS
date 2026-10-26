@@ -1,234 +1,140 @@
 # Samurai Linux Build Guide
 
-## Prerequisites
+The supported build path is Debian's `live-build`, driven by
+[`build/build.sh`](../../build/build.sh). See
+[`build/README.md`](../../build/README.md) for the operational guide.
 
-### Host Environment
-- **Architecture**: x86_64
-- **Disk Space**: minimum 50GB free (100GB+ recommended)
-- **RAM**: minimum 8GB (16GB+ recommended for build)
-- **Swap**: 8GB-16GB if RAM < 16GB
-- **CPU**: 2-core minimum, 4-core+ recommended
+> The previous `debootstrap` + `xorriso` recipe in this document was not
+> bootable. It has been replaced; do not copy old `xorriso -as iso` commands.
 
-### Required Tools
-- `debootstrap` - Debian base system installer
-- `sbuild` or `cowbuilder` - for building in clean chroot
-- `git` - for source control
-- `gnupg` - for package signature verification
-- `dpkg-dev` - Debian package development tools
-- `apt-get` - for package management
-- `xorriso` - for ISO image creation
-- `mkisofs` or `genisoimage` - ISO image generation
-- `findutils`, `coreutils` - file operations
+## 1. Build host
 
-### Recommended
-- `vim` or `neovim` - for editing configuration
-- `screen` or `tmux` - for long-running build sessions
-- `curl` and `wget` - for downloading files
+| Requirement | Minimum | Recommended |
+|---|---|---|
+| OS | Debian 13 (Trixie) | Debian 13 |
+| Architecture | x86_64 | x86_64 |
+| Free disk | 50 GiB | 100 GiB |
+| RAM | 4 GiB | 8 GiB |
+| CPU | 2 cores | 4+ cores |
 
-## Distribution Configuration
+Use a native Linux filesystem (ext4/xfs/btrfs). Do not build on a Windows
+filesystem mounted under WSL (`/mnt/c`, `/mnt/d`): `chroot` and maintainer
+scripts require Unix permissions and device nodes.
 
-### Debian Version
-- **Starting**: Debian 13 "Trixie" (testing)
-- **Verify**: Current supported point release and security status before building
-- **Mirror**: Use official Debian mirrors (`deb.debian.org`)
+## 2. Install build tools
 
-### Samurai Repository
-- Create maintained Samurai Linux repository at `samurai-repo/`
-- Include custom packages, branding, configuration
-- Package signature verification setup
-
-## Build Pipeline
-
-### Step 1: Verify Host Environment
 ```bash
-# Check disk space
-df -h /path/to/build
-
-# Check memory
-free -h
-
-# Verify architecture
-uname -m
-
-# Check available tools
-which debootstrap sbuild xorriso
+sudo apt-get update
+sudo apt-get install -y \
+    live-build debootstrap xorriso squashfs-tools gnupg
 ```
 
-### Step 2: Retrieve Source Code and Assets
+`build/build.sh` refuses to start if any required tool is missing.
+
+## 3. Configure the image
+
+`build/auto/config` pins the image definition:
+
+- Debian 13 `trixie`, `amd64`
+- `iso-hybrid` output with BIOS and UEFI boot
+- `main contrib non-free-firmware` archive areas
+- live user `samurai`, hostname `samurai`
+- KDE Plasma package list in `build/config/package-lists/samurai.list.chroot`
+
+Customise packages there, and put files that should be copied verbatim into the
+image under `build/config/includes.chroot/`. Chroot setup lives in
+`build/config/hooks/normal/`.
+
+## 4. Build
+
 ```bash
-# Initialize git repository (if not already)
-git init samurai/
+# Validate the host and generate config without building
+bash build/build.sh --check
 
-# Pull Debian base system
-debootstrap --arch=x86_64 trixie /samurai/rootfs http://deb.debian.org/debian/
-
-# Pull Samurai configuration and assets
-# (clone from distribution repo or set up local source)
+# Full clean build (requires root)
+sudo bash build/build.sh
 ```
 
-### Step 3: Verify Package and Source Integrity
-```bash
-# Import Debian archive keys
-apt-key adv --keyserver keyserver.ubuntu.com --recv-keys <key>
+The script syncs `samurai/scripts/` and `samurai/themes/` into the live-build
+include tree, runs `lb clean --purge`, builds, and copies the result to `dist/`:
 
-# Verify package signatures
-dpkg-sig --verify <package>.deb
+```
+dist/samurai-linux-YYYY.MM.DD-amd64.iso
+dist/samurai-linux-YYYY.MM.DD-amd64.iso.sha256
 ```
 
-### Step 4: Build Custom Packages
-```bash
-# Create Samurai package directories
-mkdir -p samurai/packages/{main,contrib,non-free}
+`SAMURAI_MIN_DISK_GB` and `SAMURAI_MIN_RAM_GB` override the preflight limits.
 
-# Build custom packages
-cd samurai/packages
-dpkg-buildpackage -us -uc -j$(nproc)
+## 5. Sign the release
+
+```bash
+sudo -E SAMURAI_SIGN_KEY="<gpg-key-id>" bash build/build.sh
 ```
 
-### Step 5: Assemble Customized Debian Filesystem
-```bash
-# Use sbuild or manual method
-sbuild -A -d trixie -h samurai/rootfs samurai-build
+This writes an armored **detached** signature:
 
-# Or manually overlay packages
-cp samurai/packages/*.deb /samurai/rootfs/var/cache/apt/archives/
-chroot /samurai/rootfs apt-get install -y ./*.deb
+```bash
+gpg --verify dist/samurai-linux-*.iso.sig dist/samurai-linux-*.iso
+(cd dist && sha256sum -c ./*.iso.sha256)
 ```
 
-### Step 6: Integrate KDE Plasma and Samurai Configuration
+## 6. Boot-test
+
 ```bash
-# Install KDE Plasma desktop
-chroot /samurai/rootfs apt-get install -y kde-plasma-desktop
+# Headless serial check, 180 s timeout
+bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso
 
-# Apply Samurai themes and branding
-cp -r samurai/themes/kuro /usr/share/themes/
-cp -r samurai/themes/shiro /usr/share/themes/
-
-# Configure Samurai welcome script, desktop entries, etc.
+# Interactive desktop check
+bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso --gui
 ```
 
-### Step 7: Generate ISO
+Pass criteria for the headless run: the serial log contains kernel or systemd
+boot messages. Pass criteria for the GUI run: SDDM appears and the KDE Plasma
+live session starts as user `samurai`.
+
+## 7. Verify the live session
+
+Inside the VM:
+
 ```bash
-# Create ISO directory structure
-mkdir -p iso/boot/grub
-mkdir -p iso/live
-
-# Copy root filesystem
-rsync -a /samurai/rootfs/ iso/
-
-# Configure GRUB for live system
-cat > iso/boot/grub/grub.cfg << 'GRUB_CFG'
-# Samurai Linux GRUB configuration
-menuentry 'Samurai Linux' {
-    set isofile=/samurai.iso
-    linux (isofile)/boot/vmlinuz boot=live config quiet
-    initrd (isofile)/boot/initrd.img
-}
-GRUB_CFG
-
-# Generate ISO
-xorriso -as iso -r -fjoliet-long -l -V "Samurai Linux" \
-  -o samurai.iso iso/
+samurai-theme list          # kuro, shiro
+samurai-theme shiro         # applies and persists across logout
+samurai-theme auto          # one-shot day/night selection
+samurai-theme install-auto  # systemd user timer at 06:00 and 18:00
+samurai-ai --help
+samurai-gaming status
 ```
 
-### Step 8: Calculate Checksums
-```bash
-sha256sum samurai.iso > samurai.sha256
-sha1sum samurai.iso > samurai.sha1
-gpg --armor --output samurai.iso.sig < samurai.iso
-```
+## 8. Release acceptance criteria
 
-### Step 9: Validate Packages and Image Contents
-```bash
-# Verify ISO is bootable
-# Check all packages install correctly
-# Validate filesystem hierarchy
+A release may ship only when every item passes or is explicitly waived with a
+documented reason:
 
-# Run integration tests
-./scripts/test-installation.sh
-```
+1. Bootable ISO generated and validated
+2. Installation and first boot tested
+3. KDE Plasma works as the primary desktop
+4. Kuro and Shiro themes persist and function
+5. Developer profile usable
+6. Security defaults and update mechanisms documented and tested
+7. AI assistant works with at least one configured model backend
+8. Local AI mode works without a cloud API key
+9. Cloud integrations disclose external data transmission
+10. Model routing uses documented criteria and permits user overrides
+11. Gaming capabilities tested on declared supported configurations
+12. Performance measurements reproducible
+13. Recovery and upgrade procedures documented
+14. Critical known defects resolved or explicitly block release
+15. Build and release instructions complete
+16. Checksums and GPG signature verify against the published ISO
+17. APT repository publication and upgrade path from the previous release tested
 
-### Step 10: Run Automated Tests
-```bash
-# Boot-test in QEMU
-qemu-system-x86_64 -cdrom samurai.iso -m 2048 -display none
+## 9. Troubleshooting
 
-# Test installation
-./scripts/test-full-install.sh
-
-# Verify KDE Plasma works
-# Verify themes apply correctly
-# Verify AI runtime components
-```
-
-### Step 11: Boot-Test the Image
-```bash
-# Virtual machine test
-qemu-system-x86_64 -cdrom samurai.iso -m 4096 -boot d
-
-# Real hardware testing where possible
-# Document results
-```
-
-### Step 12: Produce Release Notes and Known Limitations
-```bash
-# Document what works
-# Document known issues
-# List supported hardware
-# Note any limitations
-```
-
-## Release Process
-
-### Version numbering
-- **Major**: When release acceptance criteria are fully met
-- **Minor**: When significant features are added
-- **Patch**: When bugs are fixed or documentation updated
-
-### Before release
-- [ ] Bootable ISO generated and validated
-- [ ] Installation and first boot tested
-- [ ] KDE Plasma works as primary desktop
-- [ ] Kuro and Shiro themes persist and function
-- [ ] Developer profile usable
-- [ ] Security defaults and update mechanisms documented and tested
-- [ ] AI assistant can use at least one supported model backend when configured
-- [ ] Local AI mode works without requiring cloud API key
-- [ ] Cloud integrations clearly disclose external data transmission
-- [ ] Model routing uses documented criteria and permits user overrides
-- [ ] Gaming capabilities tested on declared supported configurations
-- [ ] Performance measurements reproducible
-- [ ] Recovery and upgrade procedures documented
-- [ ] Critical known defects resolved or explicitly block release
-- [ ] Build and release instructions complete
-
-### Release signing
-```bash
-gpg --detach-sign samurai.iso
-gpg --armor --output samurai.tar.xz.sig samurai.tar.xz
-```
-
-## Troubleshooting
-
-### Common Build Issues
-
-1. **Insufficient disk space**
-   - Solution: Free up space or use thinner filesystem layers
-
-2. **Out of memory during build**
-   - Solution: Increase swap, reduce parallel jobs (`-j` flag)
-
-3. **GPG key import failures**
-   - Solution: Use `apt-key` or `dpkg-sig` with correct keys
-
-4. **GRUB configuration errors**
-   - Solution: Verify `grub.cfg` syntax, test in QEMU first
-
-5. **KDE Plasma fails to start**
-   - Solution: Check `xorg.conf`, verify GPU drivers, check `.xsession-errors`
-
-### Build Environment Recommendations
-- Use a dedicated build partition or VM with 50GB+ and 8GB+ RAM
-- Keep build logs for reproducibility
-- Version-control all configuration changes
-- Test each build step before proceeding to next
+| Problem | Fix |
+|---|---|
+| `lb: command not found` | `sudo apt-get install live-build` |
+| Disk check fails | Free space; 50 GiB is the hard minimum |
+| Build fails in `/mnt/*` | Move the checkout to the Linux filesystem |
+| `steam-installer` unavailable at runtime | Enable `contrib` and run `sudo apt-get update` |
+| Theme does not change immediately | Run inside a Plasma session; `plasma-apply-colorscheme` needs D-Bus |
+| Scripts fail with `$'\r'` | Re-clone in Linux; `.gitattributes` enforces LF |

@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: ShellCheck and smoke tests
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - name: Install git for checkout
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: |
+          apt-get install -y --no-install-recommends bash python3 shellcheck
+      - name: Run smoke tests
+        run: bash tests/smoke.sh
+
+  live-build-config:
+    name: Validate live-build config
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - name: Install git for checkout
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+      - uses: actions/checkout@v4
+      - name: Install live-build
+        run: |
+          apt-get install -y --no-install-recommends bash debootstrap live-build squashfs-tools xorriso
+      - name: Check host and generate config
+        run: |
+          SAMURAI_MIN_DISK_GB=1 SAMURAI_MIN_RAM_GB=1 bash build/build.sh --check

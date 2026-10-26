@@ -1,5 +1,11 @@
 # Samurai Linux Architecture
 
+> This document describes the target architecture. Implemented today: the
+> `live-build` ISO pipeline, the `samurai-ai` / `samurai-theme` /
+> `samurai-gaming` CLIs, and the Kuro/Shiro KDE color schemes. The installer,
+> model router, control center, and signed package repository are planned. See
+> [`../../README.md`](../../README.md) for current status.
+
 ## Distribution
 - **Name**: Samurai Linux
 - **Base**: Debian Stable (starting with Debian 13 "Trixie")
@@ -189,12 +195,12 @@
 - Controlled strategy for mixing repository types
 
 ## Build and Release Engineering
-- Reproducible pipeline with 12 steps
+- `live-build` pipeline driven by `build/build.sh`
 - Version-controlled build configuration
 - Pinned versions and documented update procedures
 
 ## Required Project Documentation
-- README.md (this file)
+- README.md
 - docs/architecture.md
 - docs/build-guide.md
 - docs/security.md

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Install Samurai color schemes and enforce permissions inside the chroot.
+# Do not remove APT lists here: live-build's binary stage installs bootloader
+# packages into the chroot after this hook runs.
+set -eu
+
+for script in samurai-ai samurai-theme samurai-gaming; do
+    if [ -f "/usr/local/bin/$script" ]; then
+        chmod 0755 "/usr/local/bin/$script"
+    fi
+done
+
+install -d -m 0755 /usr/share/color-schemes
+for scheme in /usr/share/samurai/themes/*/*.colors; do
+    [ -f "$scheme" ] || continue
+    install -m 0644 "$scheme" "/usr/share/color-schemes/$(basename "$scheme")"
+done

@@ -1,13 +1,17 @@
 # Samurai Linux Installation and First Boot
 
+> The `samurai-install` installer is not implemented yet; the steps below are
+> the target design. The current ISO boots a live KDE Plasma session.
+
 ## Bootable ISO
 
 ### ISO Generation
 ```bash
-# Build ISO from customized rootfs
-xorriso -as iso -r -fjoliet-long -l -V "Samurai Linux" \
-  -o /output/samurai.iso /path/to/rootfs/
+# Build the ISO with the supported live-build pipeline
+sudo bash build/build.sh
 ```
+
+See [`build/README.md`](../../build/README.md).
 
 ### GRUB Configuration for Live System
 ```grub
@@ -90,10 +94,10 @@ samurai-install select-profile ai-dev
 curl -s https://ollama.com/download/ollama-linux-amd64.tar.gz | tar -xz -C /usr/local/bin
 
 # Pull default model
-ollama pull llama2
+ollama pull llama3.2:3b
 
 # Configure Samurai AI Assistant
-samurai-ai configure --model llama2
+samurai-ai configure --model llama3.2:3b
 
 # Test inference
 samurai-ai chat "Hello, how are you?"
@@ -135,4 +139,4 @@ samurai-theme auto
 - **Live ISO rescue** - boot from ISO and recover system
 - **Backup configuration** - `/home/.samurai-backup/`
 - **Repository recovery** - restore Samurai package repo
-- **Theme recovery** - reinstall from `/opt/samurai/themes/`
+- **Theme recovery** - reinstall from `/usr/share/samurai/themes/`

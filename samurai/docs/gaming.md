@@ -1,5 +1,11 @@
 # Samurai Gaming Configuration
 
+> **Implemented today:** `samurai-gaming install-profile` installs
+> `steam-installer` (Debian `contrib`), GameMode, and MangoHUD, plus optional
+> Lutris/Gamescope when available. `samurai-gaming steam|lutris` launches through
+> GameMode and MangoHUD. Automatic controller setup and redistributable
+> installation are not implemented.
+
 ## Gaming Support
 
 ### Compatibility Layer
@@ -44,10 +50,10 @@ samurai-gaming steam
 # Launch Lutris with Samurai configuration
 samurai-gaming lutris
 
-# Toggle GameMode
-systemctl start gamemoded
+# Toggle GameMode (user service)
+systemctl --user start gamemoded
 
-# Monitor with MangoHUD
+# Monitor with MangoHUD (Steam launch option form)
 MANGOHUD=1 %command%
 ```
 

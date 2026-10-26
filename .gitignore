@@ -1,0 +1,38 @@
+# live-build state
+build/.build/
+build/binary/
+build/bootstrap/
+build/cache/
+build/chroot/
+build/local/
+build/config/binary
+build/config/bootstrap
+build/config/chroot
+build/config/common
+build/config/source
+build/config/hooks/live/
+build/config/hooks/normal/*
+!build/config/hooks/normal/0100-samurai.hook.chroot
+build/config/package-lists/live.list.chroot
+build/config/includes.chroot/usr/local/bin/
+build/config/includes.chroot/usr/share/samurai/themes/
+build/build.log
+build/qemu-serial.log
+build/live-image-*
+build/*.iso
+build/*.contents
+build/*.files
+build/*.packages
+build/*.sha256
+build/*.sha1
+build/*.sig
+
+# Build output
+dist/
+
+# Reference ISOs used by scripts/post-build-workflow.sh (too large for Git)
+ref/
+
+# Python
+__pycache__/
+*.pyc

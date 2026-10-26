@@ -1,72 +1,122 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Samurai Gaming Profile Manager
+set -euo pipefail
 
-case "$1" in
-    install-profile)
-        echo "Installing Samurai gaming profile..."
-        
-        # Install Steam
-        if ! command -v steam &>/dev/null; then
-            echo "Installing Steam..."
-            # Flatpak or apt
-            sudo apt-get install -y steam
+log() { printf '%s\n' "$*"; }
+warn() { printf 'Warning: %s\n' "$*" >&2; }
+die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    cat <<'EOF'
+Samurai Gaming Profile Manager
+
+Usage: samurai-gaming <command> [args...]
+
+Commands:
+  install-profile  Install Steam, GameMode, MangoHUD and optional tools
+  steam [args...]  Launch Steam through GameMode and MangoHUD
+  lutris [args...] Launch Lutris through GameMode and MangoHUD
+  status           Show which gaming components are installed
+EOF
+}
+
+as_root() {
+    if ((EUID == 0)); then
+        "$@"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo "$@"
+    else
+        die "Root privileges are required and sudo is not available"
+    fi
+}
+
+cmd_install_profile() {
+    [[ -f /etc/debian_version ]] || die "install-profile currently supports Debian-based systems only"
+    command -v apt-get >/dev/null 2>&1 || die "apt-get not found"
+
+    log "Enabling i386 architecture (required by the Steam client)..."
+    as_root dpkg --add-architecture i386
+
+    log "Refreshing package lists..."
+    as_root apt-get update
+
+    if ! apt-cache show steam-installer >/dev/null 2>&1; then
+        die "steam-installer is unavailable. Enable the 'contrib' component in your APT sources and rerun this command."
+    fi
+
+    local failed=0 pkg
+    for pkg in steam-installer gamemode mangohud; do
+        log "Installing $pkg..."
+        if ! as_root apt-get install -y "$pkg"; then
+            warn "Failed to install $pkg"
+            failed=1
         fi
-        
-        # Install Proton enhancements
-        echo "Installing Proton extras..."
-        # This would install proton-ge, proton-gtk, etc.
-        
-        # Install GameMode
-        if ! systemctl is-active gamemoded &>/dev/null; then
-            echo "Installing GameMode..."
-            sudo apt-get install -y gamemode
-            sudo systemctl enable gamemoded
-            sudo systemctl start gamemoded
-        fi
-        
-        # Install MangoHUD
-        if ! command -v mangohud &>/dev/null; then
-            echo "Installing MangoHUD..."
-            sudo apt-get install -y mangohud
-        fi
-        
-        # Install common redistributables
-        echo "Installing common redistributables..."
-        sudo apt-get install -y winetricks
-        
-        # Configure Steam Proton
-        echo "Configuring Steam Proton..."
-        # Set Proton versions, etc.
-        
-        echo "Gaming profile installed successfully!"
-        echo "Run: samurai-gaming steam  to launch Steam with optimizations"
-        ;;
-    
-    steam)
-        echo "Launching Steam with Samurai gaming optimizations..."
-        if command -v mangohud &>/dev/null; then
-            MANGOHUD=1 steam "$@"
+    done
+
+    for pkg in winetricks lutris gamescope protontricks; do
+        if apt-cache show "$pkg" >/dev/null 2>&1; then
+            log "Installing optional package $pkg..."
+            if ! as_root apt-get install -y "$pkg"; then
+                warn "Failed to install optional package $pkg"
+            fi
         else
-            steam "$@"
+            warn "Optional package $pkg is not available in the configured repositories"
         fi
-        ;;
-    
-    lutris)
-        echo "Launching Lutris with Samurai configuration..."
-        if command -v mangohud &>/dev/null; then
-            MANGOHUD=1 lutris "$@"
+    done
+
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl --user enable --now gamemoded 2>/dev/null; then
+            log "gamemoded enabled for the current user"
         else
-            lutris "$@"
+            warn "Could not enable gamemoded; try: systemctl --user enable --now gamemoded"
         fi
-        ;;
-    
-    *)
-        echo "Samurai Gaming Profile Manager"
-        echo "Usage: samurai-gaming <command>"
-        echo ""
-        echo "Commands:"
-        echo "  install-profile  - Install gaming profile with Steam, Proton, GameMode, MangoHUD"
-        echo "  steam            - Launch Steam with optimizations (MangoHUD enabled)"
-        echo "  lutris           - Launch Lutris with MangoHUD"
-        ;;
-esac
+    fi
+
+    ((failed == 0)) || die "Gaming profile installed with errors; review the warnings above"
+    log "Gaming profile installed. Run: samurai-gaming steam"
+}
+
+cmd_launch() {
+    local app="$1"
+    shift
+    command -v "$app" >/dev/null 2>&1 || die "$app is not installed. Run: samurai-gaming install-profile"
+
+    local -a command=()
+    if command -v gamemoderun >/dev/null 2>&1; then
+        command+=(gamemoderun)
+    fi
+    if command -v mangohud >/dev/null 2>&1; then
+        command+=(mangohud)
+    fi
+    command+=("$app" "$@")
+    exec "${command[@]}"
+}
+
+cmd_status() {
+    local app
+    for app in steam lutris heroic mangohud gamemoderun; do
+        if command -v "$app" >/dev/null 2>&1; then
+            log "$app: installed ($(command -v "$app"))"
+        else
+            log "$app: not installed"
+        fi
+    done
+    if command -v systemctl >/dev/null 2>&1; then
+        log "gamemoded: $(systemctl is-active gamemoded 2>/dev/null || true)"
+    fi
+}
+
+main() {
+    local cmd="${1:-}"
+    (($# > 0)) && shift
+    case "$cmd" in
+        install-profile) cmd_install_profile ;;
+        steam) cmd_launch steam "$@" ;;
+        lutris) cmd_launch lutris "$@" ;;
+        status) cmd_status ;;
+        ""|-h|--help|help) usage ;;
+        *) die "Unknown command: $cmd (run: samurai-gaming --help)" ;;
+    esac
+}
+
+main "$@"

@@ -1,5 +1,10 @@
 # Samurai KDE Plasma and Design System
 
+> **Implemented today:** Kuro and Shiro KDE color schemes (`.colors`) installed
+> system-wide and per user, the `samurai-theme` CLI, and the optional systemd
+> user timer. Wallpapers, icon sets, cursors, login-screen branding, and
+> installer artwork are **not included yet**.
+
 ## Kuro - Dark Theme
 
 ### Color Palette
@@ -22,15 +27,20 @@
 
 ### Configuration
 ```bash
-# Set Kuro theme
+# Apply and persist Kuro
+samurai-theme kuro
+
+# Or use the explicit form
 samurai-theme set kuro
 
-# Apply to KDE Plasma
-qdbus org.kde.KWin /KWin setTheme "Samurai Kuro"
-
-# Set colorscheme
-plasma-apply-colorscheme /opt/samurai/themes/kuro/colorscheme.kcm
+# List themes and show the current selection
+samurai-theme list
+samurai-theme status
 ```
+
+The scheme is installed as `~/.local/share/color-schemes/samurai-kuro.colors`
+and activated with `plasma-apply-colorscheme samurai-kuro`. The system copy lives
+in `/usr/share/color-schemes/samurai-kuro.colors`.
 
 ## Shiro - Light Theme
 
@@ -54,22 +64,24 @@ plasma-apply-colorscheme /opt/samurai/themes/kuro/colorscheme.kcm
 
 ### Configuration
 ```bash
-# Set Shiro theme
+# Apply and persist Shiro
+samurai-theme shiro
+
+# Or use the explicit form
 samurai-theme set shiro
-
-# Apply to KDE Plasma
-qdbus org.kde.KWin /KWin setTheme "Samurai Shiro"
-
-# Set colorscheme
-plasma-apply-colorscheme /opt/samurai/themes/shiro/colorscheme.kcm
 ```
+
+The scheme is installed as `~/.local/share/color-schemes/samurai-shiro.colors`
+and activated with `plasma-apply-colorscheme samurai-shiro`.
 
 ## Theme Selector
 - **Persistent theme selector** in System Settings -> Appearance
-- **Auto mode** - follows system color scheme (light/dark automatic)
-- **Contrast testing** - ensured for both themes
-- **Focus states** - visible focus indicators in both themes
-- **Application behavior** - tested in both themes
+- **CLI selector** - `samurai-theme kuro|shiro|list|status`
+- **Auto mode** - `samurai-theme auto` switches at 06:00 and 18:00
+- **Persistent auto mode** - `samurai-theme install-auto` installs a systemd user timer
+- **Contrast testing** - palette values target WCAG AA for body text
+- **Focus states** - crimson/gold focus indicators defined in both schemes
+- **Application behavior** - still needs testing against real KDE applications
 
 ## Installation Artwork
 - **Original wallpapers** - Japanese Samurai motifs

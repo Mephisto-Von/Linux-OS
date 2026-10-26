@@ -13,6 +13,7 @@ A Debian-based operating system combining AI-assisted computing, software develo
 Developer OS with AI integration, gaming support, and secure defaults.
 
 ## Quick Links
+- [Build the ISO](../build/README.md)
 - [Architecture](docs/architecture.md)
 - [Build Guide](docs/build-guide.md)
 - [Security](docs/security.md)

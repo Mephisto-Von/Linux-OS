@@ -1,5 +1,9 @@
 # Samurai Build and Release Engineering
 
+> **Legacy document.** The maintained build is `build/build.sh` with Debian
+> `live-build`; see [`build/README.md`](../../build/README.md). The commands
+> below are retained for history and must not be used to build a release.
+
 ## Reproducible Pipeline - 12 Steps
 
 ### Step 1: Verify Host Environment
@@ -30,7 +34,7 @@ git init samurai/
 cd samurai
 
 # Pull Debian base system
-debootstrap --arch=x86_64 trixie /samurai/rootfs http://deb.debian.org/debian/
+debootstrap --arch=amd64 trixie /samurai/rootfs http://deb.debian.org/debian/
 
 # Pull Samurai configuration and assets
 # (clone from distribution repo or set up local source)
@@ -95,38 +99,20 @@ echo "Exec=/opt/samurai/scripts/start-plasma.sh" >> /usr/share/xsessions/samurai
 
 ### Step 7: Generate ISO
 ```bash
-# Create ISO directory structure
-mkdir -p iso/boot/grub
-mkdir -p iso/live
-
-# Copy root filesystem
-rsync -a /samurai/rootfs/ iso/
-
-# Configure GRUB for live system
-cat > iso/boot/grub/grub.cfg << 'GRUB_CFG'
-# Samurai Linux GRUB configuration
-menuentry 'Samurai Linux' {
-    set isofile=/samurai.iso
-    linux (isofile)/boot/vmlinuz boot=live config quiet
-    initrd (isofile)/boot/initrd.img
-}
-GRUB_CFG
-
-# Generate ISO
-xorriso -as iso -r -fjoliet-long -l -V "Samurai Linux" \
-  -o samurai.iso iso/
+# Supported pipeline
+sudo bash build/build.sh
 ```
+
+The legacy `xorriso` recipe was invalid and produced a non-bootable data ISO.
 
 ### Step 8: Calculate Checksums
 ```bash
-sha256sum samurai.iso > samurai.sha256
-sha1sum samurai.iso > samurai.sha1
+sha256sum samurai-linux-*.iso > samurai-linux-*.iso.sha256
+gpg --armor --detach-sign --output samurai-linux-*.iso.sig samurai-linux-*.iso
 
-# GPG sign the ISO
-gpg --armor --output samurai.iso.sig samurai.iso
-
-# Verify checksum
-sha256sum -c samurai.sha256
+# Verify
+sha256sum -c samurai-linux-*.iso.sha256
+gpg --verify samurai-linux-*.iso.sig samurai-linux-*.iso
 ```
 
 ### Step 9: Validate Packages and Image Contents

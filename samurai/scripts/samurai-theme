@@ -1,85 +1,222 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Samurai Theme Manager
+set -euo pipefail
 
-KURO_THEME="/opt/samurai/themes/kuro"
-SHIRO_THEME="/opt/samurai/themes/shiro"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
+THEME_DIR="${SAMURAI_THEME_DIR:-}"
+if [[ -z "$THEME_DIR" ]]; then
+    for candidate in /usr/share/samurai/themes /opt/samurai/themes "$SCRIPT_DIR/../themes" "$SCRIPT_DIR/themes"; do
+        if [[ -d "$candidate" ]]; then
+            THEME_DIR="$candidate"
+            break
+        fi
+    done
+fi
 
-case "$1" in
-    kuro)
-        echo "Setting Samurai Kuro (dark) theme..."
-        
-        # Apply KDE colorscheme
-        if [ -f "$KURO_THEME/colors.css" ]; then
-            # Copy colorscheme to KDE share
-            mkdir -p ~/.local/share/kde-colorschemes/
-            cp "$KURO_THEME/colors.css" ~/.local/share/kde-colorschemes/samurai-kuro.colors
-            echo "Kuro colorscheme installed"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/samurai"
+SCHEME_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/color-schemes"
+AUTO_UNIT_DIR="$CONFIG_DIR/systemd/user"
+THEME_MARKER="$CONFIG_DIR/theme"
+
+log() { printf '%s\n' "$*"; }
+warn() { printf 'Warning: %s\n' "$*" >&2; }
+die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    cat <<'EOF'
+Samurai Theme Manager
+
+Usage: samurai-theme <command>
+
+Commands:
+  kuro          Apply the Kuro (dark) color scheme
+  shiro         Apply the Shiro (light) color scheme
+  set <theme>   Alias for: samurai-theme <theme>
+  default       Apply the last selected theme (Kuro on first login)
+  auto          Apply Shiro between 06:00-17:59, Kuro otherwise
+  install-auto  Install a systemd user timer for automatic switching
+  disable-auto  Remove the automatic switching timer
+  list          List available themes and the current selection
+  status        Show the current theme and installed scheme files
+
+Environment:
+  SAMURAI_THEME_DIR   Directory containing kuro/ and shiro/ theme folders
+EOF
+}
+
+require_theme_dir() {
+    [[ -n "$THEME_DIR" && -d "$THEME_DIR" ]] || die "Theme directory not found. Set SAMURAI_THEME_DIR."
+}
+
+scheme_name() {
+    local name="$1"
+    printf 'samurai-%s\n' "$name"
+}
+
+theme_file() {
+    local name="$1"
+    printf '%s/%s/samurai-%s.colors\n' "$THEME_DIR" "$name" "$name"
+}
+
+available_themes() {
+    local dir name
+    for dir in "$THEME_DIR"/*/; do
+        [[ -d "$dir" ]] || continue
+        name=$(basename "$dir")
+        if [[ -f "$dir/samurai-$name.colors" ]]; then
+            printf '%s\n' "$name"
         fi
-        
-        # Set cursor theme if available
-        if [ -f "$KURO_THEME/cursor.tar.gz" ]; then
-            # tar -xzf "$KURO_THEME/cursor.tar.gz" -C /usr/share/icons/
-            echo "Cursor theme would be applied"
+    done
+}
+
+current_theme() {
+    if [[ -f "$THEME_MARKER" ]]; then
+        local name
+        name=$(<"$THEME_MARKER")
+        if [[ -n "$name" ]]; then
+            printf '%s\n' "$name"
+            return 0
         fi
-        
-        # Apply boot/grub branding
-        echo "Samurai Kuro theme applied"
-        echo "Background: #111214"
-        echo "Panels: #1B1D20"
-        echo "Elevated surfaces: #25272B"
-        echo "Primary text: #F2EEE5"
-        echo "Crimson accent: #B52832"
-        echo "Gold accent: #B89A59"
-        ;;
-    
-    shiro)
-        echo "Setting Samurai Shiro (light) theme..."
-        
-        # Apply KDE colorscheme
-        if [ -f "$SHIRO_THEME/colors.css" ]; then
-            mkdir -p ~/.local/share/kde-colorschemes/
-            cp "$SHIRO_THEME/colors.css" ~/.local/share/kde-colorschemes/samurai-shiro.colors
-            echo "Shiro colorscheme installed"
-        fi
-        
-        # Apply boot/grub branding
-        echo "Samurai Shiro theme applied"
-        echo "Background: #F5F0E6"
-        echo "Panels: #ECE5D8"
-        echo "Elevated surfaces: #FFFDF8"
-        echo "Primary text: #242321"
-        echo "Vermilion accent: #B52832"
-        echo "Gold accent: #96733B"
-        ;;
-    
-    auto)
-        echo "Setting automatic theme switching..."
-        # Detect time of day and switch accordingly
-        hour=$(date +%H)
-        if [ "$hour" -ge 6 ] && [ "$hour" -lt 18 ]; then
-            samurai-theme shiro
-            echo "Day mode: Shiro (light)"
+    fi
+    printf 'kuro\n'
+}
+
+install_theme() {
+    local name="$1" scheme source target
+    require_theme_dir
+    [[ -n "$name" ]] || die "Theme name cannot be empty"
+    scheme=$(scheme_name "$name")
+    source=$(theme_file "$name")
+    [[ -f "$source" ]] || die "Unknown theme: $name (available: $(available_themes | paste -sd ', ' -))"
+    mkdir -p "$SCHEME_DIR" "$CONFIG_DIR"
+    target="$SCHEME_DIR/$scheme.colors"
+    install -m 0644 "$source" "$target"
+    # Remove the obsolete CSS copy created by older versions of this script.
+    rm -f "$HOME/.local/share/kde-colorschemes/$scheme.colors" 2>/dev/null || true
+    printf '%s\n' "$name" > "$THEME_MARKER"
+    log "Installed $target"
+    if command -v plasma-apply-colorscheme >/dev/null 2>&1; then
+        if plasma-apply-colorscheme "$scheme" >/dev/null 2>&1; then
+            log "Applied Samurai $name color scheme"
         else
-            samurai-theme kuro
-            echo "Night mode: Kuro (dark)"
+            warn "Installed the scheme, but plasma-apply-colorscheme failed (is a Plasma session running?)"
         fi
-        ;;
-    
-    list)
-        echo "Available Samurai themes:"
-        echo "  kuro  - Dark theme (background: #111214)"
-        echo "  shiro - Light theme (background: #F5F0E6)"
-        echo "  auto  - Automatic light/dark switching"
-        ;;
-    
-    *)
-        echo "Samurai Theme Manager"
-        echo "Usage: samurai-theme <command>"
-        echo ""
-        echo "Commands:"
-        echo "  kuro   - Set dark theme (Kuro)"
-        echo "  shiro  - Set light theme (Shiro)"
-        echo "  auto   - Automatic light/dark switching"
-        echo "  list   - List available themes"
-        ;;
-esac
+    else
+        warn "plasma-apply-colorscheme not found; the scheme will be used after the next Plasma login"
+    fi
+}
+
+cmd_default() {
+    local name
+    name=$(current_theme)
+    install_theme "$name"
+}
+
+cmd_auto() {
+    local hour name
+    hour=$(date +%H)
+    if ((10#$hour >= 6 && 10#$hour < 18)); then
+        name="shiro"
+    else
+        name="kuro"
+    fi
+    log "Automatic selection: $name"
+    install_theme "$name"
+}
+
+cmd_install_auto() {
+    mkdir -p "$AUTO_UNIT_DIR"
+    cat > "$AUTO_UNIT_DIR/samurai-theme-auto.service" <<EOF
+[Unit]
+Description=Apply the Samurai theme for the current time of day
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart="$SCRIPT_DIR/samurai-theme" auto
+EOF
+    cat > "$AUTO_UNIT_DIR/samurai-theme-auto.timer" <<'EOF'
+[Unit]
+Description=Switch Samurai themes at 06:00 and 18:00
+
+[Timer]
+OnCalendar=*-*-* 06,18:00:00
+OnBootSec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user daemon-reload
+        systemctl --user enable --now samurai-theme-auto.timer
+        log "Automatic theme switching enabled"
+    else
+        warn "systemctl not found; timer files were written to $AUTO_UNIT_DIR"
+    fi
+}
+
+cmd_disable_auto() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user disable --now samurai-theme-auto.timer 2>/dev/null || true
+    fi
+    rm -f "$AUTO_UNIT_DIR/samurai-theme-auto.service" "$AUTO_UNIT_DIR/samurai-theme-auto.timer"
+    log "Automatic theme switching disabled"
+}
+
+cmd_list() {
+    require_theme_dir
+    local current name
+    current=$(current_theme)
+    log "Available Samurai themes:"
+    while IFS= read -r name; do
+        if [[ "$name" == "$current" ]]; then
+            log "  $name  (current)"
+        else
+            log "  $name"
+        fi
+    done < <(available_themes)
+}
+
+cmd_status() {
+    local current installed
+    current=$(current_theme)
+    installed="$SCHEME_DIR/$(scheme_name "$current").colors"
+    log "Selected theme: $current"
+    if [[ -f "$installed" ]]; then
+        log "Installed scheme: $installed"
+    else
+        log "Installed scheme: not installed yet"
+    fi
+    if command -v kreadconfig6 >/dev/null 2>&1; then
+        log "KDE ColorScheme: $(kreadconfig6 --file kdeglobals --group KDE --key ColorScheme 2>/dev/null || true)"
+    fi
+    if command -v systemctl >/dev/null 2>&1 &&
+        systemctl --user is-enabled samurai-theme-auto.timer >/dev/null 2>&1; then
+        log "Automatic switching: enabled"
+    else
+        log "Automatic switching: disabled"
+    fi
+}
+
+main() {
+    local cmd="${1:-}"
+    (($# > 0)) && shift
+    case "$cmd" in
+        kuro|shiro) install_theme "$cmd" ;;
+        set)
+            [[ -n "${1:-}" ]] || die "Usage: samurai-theme set <theme>"
+            install_theme "$1"
+            ;;
+        default) cmd_default ;;
+        auto) cmd_auto ;;
+        install-auto) cmd_install_auto ;;
+        disable-auto) cmd_disable_auto ;;
+        list) cmd_list ;;
+        status) cmd_status ;;
+        ""|-h|--help|help) usage ;;
+        *) die "Unknown command: $cmd (run: samurai-theme --help)" ;;
+    esac
+}
+
+main "$@"

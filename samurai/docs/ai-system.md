@@ -1,11 +1,15 @@
 # Samurai AI System Configuration
 
+> **Status:** implemented today are Ollama-backed chat, model install/delete/list,
+> hardware and memory reporting, a rough RAM-fit estimate, and credential
+> storage. The desktop widget, model router, automatic inference pausing, and
+> AI-assisted system operations are planned.
+
 ## 4.1 Local AI Runtime
 
 ### Engine Selection
-- **Primary**: llama.cpp - lightweight, CPU/GPU compatible, supports many model formats
-- **Secondary**: Ollama - user-friendly wrapper around llama.cpp with model management
-- **Fallback**: ctransformors - Python library for fast inference
+- **Implemented**: Ollama (the CLI shells out to `ollama run`, `pull`, `rm`, `list`)
+- **Planned**: a provider abstraction for direct llama.cpp or other engines
 
 ### Model Discovery and Installation
 ```bash
@@ -44,16 +48,19 @@ samurai-ai status
 ```
 
 ### Resource Controls
-- Context-length limits based on available RAM
-- Memory-budget controls to prevent desktop unresponsiveness
-- Automatic inference pause when system load is high
+- **Implemented**: a suggested model budget of 1/8 of system RAM and a rough
+  parameter-count/RAM compatibility estimate
+- **Planned**: context-length limits enforced by the runtime, and automatic
+  inference pause when system load is high
 
 ## 4.2 Samurai AI Assistant
 
-### Interface
+### Interface (planned)
 - **Desktop widget**: KDE Plasma applet
 - **Keyboard shortcut**: `Ctrl`+`Space` to activate
 - **System tray** indicator for status
+
+Currently the assistant is terminal-only: `samurai-ai chat "..."`.
 
 ### Features
 - Chat interface with conversation history
@@ -70,7 +77,7 @@ samurai-ai status
 - Speech output (via eSpeak or similar)
 - Cloud model integrations (OpenAI, Anthropic, etc.)
 
-## 4.3 Intelligent Model Router
+## 4.3 Intelligent Model Router (planned)
 
 ### Task Categories
 - **Coding**: Model selection for programming tasks
@@ -99,7 +106,7 @@ Will stay on-device: Yes
 Cost: $0.00
 ```
 
-## 4.4 AI-Assisted System Operations
+## 4.4 AI-Assisted System Operations (planned)
 
 ### Permissioned Execution
 All AI-proposed actions require explicit user confirmation for:
@@ -133,7 +140,7 @@ All AI-proposed actions require explicit user confirmation for:
 - Subject to model and hardware limitations
 - Preferred for privacy-sensitive work
 
-### Cloud Mode
+### Cloud Mode (planned)
 - Users configure supported providers with their own credentials
 - Supported providers: OpenAI, Anthropic, Google, local Ollama instances
 - Credentials stored in OS credential store (Kwallet/SecretService)
@@ -141,12 +148,17 @@ All AI-proposed actions require explicit user confirmation for:
 
 ### Credential Storage
 ```bash
-# Store API key securely
+# Store an API key in the Secret Service (libsecret / KWallet)
 samurai-ai credentials set <provider> <key>
 
-# Retrieve API key
+# Retrieve it (prints only the key, for scripting)
 samurai-ai credentials get <provider>
 
-# Remove stored credential
+# Remove it
 samurai-ai credentials remove <provider>
 ```
+
+`samurai-ai` uses `secret-tool` when available. If no Secret Service is running,
+it falls back to `~/.config/samurai/credentials` with mode `0600` and prints a
+warning; that fallback is **not encrypted**. Set `SAMURAI_AI_FORCE_FILE=1` to
+force the file backend for testing.

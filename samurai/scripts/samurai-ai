@@ -1,147 +1,371 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Samurai AI Assistant CLI
+set -euo pipefail
 
-MODEL="${1:-}"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/samurai"
+DEFAULT_FILE="$CONFIG_DIR/ai-default"
+CRED_FILE="$CONFIG_DIR/credentials"
 
-case "$MODEL" in
-    chat)
-        if [ -z "$2" ]; then
-            echo "Usage: samurai-ai chat <message>"
-            exit 1
+log() { printf '%s\n' "$*"; }
+warn() { printf 'Warning: %s\n' "$*" >&2; }
+die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    cat <<'EOF'
+Samurai AI Assistant
+
+Usage: samurai-ai <command> [options]
+
+Commands:
+  chat [--model ID] <message>  Chat with a local Ollama model
+  install-model <id>           Pull a model via Ollama
+  delete-model <id>            Remove a local model
+  list-models                  List installed models
+  status                       Show inference and credential status
+  gpu-info                     Detect the GPU
+  cpu-info                     Show CPU information
+  memory-budget                Show RAM and a suggested AI budget
+  set-default <model>          Set the default model
+  get-default                  Print the default model
+  configure --model <model>    Set (and optionally pull) the default model
+  check-compatibility <model>  Estimate whether a model fits this machine
+  credentials set <provider> <key>
+  credentials get <provider>
+  credentials remove <provider>
+
+Environment:
+  SAMURAI_AI_MODEL            Override the default model for one invocation
+  SAMURAI_AI_FORCE_FILE=1     Use the 0600 file fallback instead of secret-tool
+EOF
+}
+
+usage_credentials() {
+    cat <<'EOF'
+Usage:
+  samurai-ai credentials set <provider> <key>
+  samurai-ai credentials get <provider>
+  samurai-ai credentials remove <provider>
+EOF
+}
+
+get_default_model() {
+    if [[ -n "${SAMURAI_AI_MODEL:-}" ]]; then
+        printf '%s\n' "$SAMURAI_AI_MODEL"
+        return 0
+    fi
+    if [[ -f "$DEFAULT_FILE" ]]; then
+        local model
+        model=$(<"$DEFAULT_FILE")
+        if [[ -n "$model" ]]; then
+            printf '%s\n' "$model"
+            return 0
         fi
-        # Use ollama for local chat
-        if command -v ollama &>/dev/null; then
-            ollama chat llama2 "$2"
-        else
-            echo "Ollama not installed. Install with: curl -s https://ollama.com/download/ollama-linux-amd64.tar.gz | tar -xz -C /usr/local/bin"
-        fi
-        ;;
-    
-    install-model)
-        if [ -z "$2" ]; then
-            echo "Usage: samurai-ai install-model <model-id>"
-            exit 1
-        fi
-        if command -v ollama &>/dev/null; then
-            ollama pull "$2"
-        else
-            echo "Ollama not installed"
-        fi
-        ;;
-    
-    list-models)
-        if command -v ollama &>/dev/null; then
-            ollama list
-        else
-            echo "Ollama not installed"
-        fi
-        ;;
-    
-    status)
-        if command -v ollama &>/dev/null; then
-            ollama ps
-        else
-            echo "Ollama not installed"
-        fi
-        ;;
-    
-    gpu-info)
-        if lspci 2>/dev/null | grep -i nvidia; then
-            echo "NVIDIA GPU detected"
-        elif lspci 2>/dev/null | grep -i amd; then
-            echo "AMD GPU detected"
-        elif lspci 2>/dev/null | grep -i intel; then
-            echo "Intel GPU detected"
-        else
-            echo "No GPU detected or integrated graphics"
-        fi
-        ;;
-    
-    cpu-info)
-        echo "CPU information:"
-        lscpu 2>/dev/null || cat /proc/cpuinfo | head -5
-        ;;
-    
-    memory-budget)
-        echo "Memory information:"
-        free -h
-        total_mem=$(free | grep '^Mem:' | awk '{print $2}')
-        echo "Total memory: $total_mem"
-        recommended=$(echo "scale=0; $total_mem / 8" | bc)
-        echo "Recommended AI context (1/8 of RAM): ~${recommended}MB"
-        ;;
-    
-    set-default)
-        if [ -z "$2" ]; then
-            echo "Usage: samurai-ai set-default <model-id>"
-            exit 1
-        fi
-        # Create default model config
-        echo "model=$2" > ~/.config/samurai/ai-default
-        echo "Default model set to: $2"
-        ;;
-    
-    check-compatibility)
-        if [ -z "$2" ]; then
-            echo "Usage: samurai-ai check-compatibility <model-id>"
-            exit 1
-        fi
-        # Check if model is compatible with available hardware
-        model="$2"
-        gpu=$(lspci 2>/dev/null | grep -iE 'nvidia|amd|intel' | head -1)
-        if [ -z "$gpu" ]; then
-            echo "No GPU detected - CPU only inference"
-        fi
-        echo "Model: $model"
-        echo "Hardware: $gpu"
-        echo "Checking compatibility... (placeholder - full check requires model metadata)"
-        ;;
-    
-    credentials)
-        case "$2" in
-            set)
-                if [ -z "$3" ] || [ -z "$4" ]; then
-                    echo "Usage: samurai-ai credentials set <provider> <key>"
-                    exit 1
-                fi
-                # Store credential in Kwallet/SecretService or encrypted file
-                echo "provider=$3" >> ~/.config/samurai/credentials
-                echo "key=$(echo "$4" | base64)" >> ~/.config/samurai/credentials
-                echo "Credential for $3 stored securely"
+    fi
+    return 1
+}
+
+set_default_model() {
+    local model="$1"
+    [[ -n "$model" ]] || die "Model id cannot be empty"
+    mkdir -p "$CONFIG_DIR"
+    printf '%s\n' "$model" > "$DEFAULT_FILE.tmp"
+    mv "$DEFAULT_FILE.tmp" "$DEFAULT_FILE"
+}
+
+require_ollama() {
+    command -v ollama >/dev/null 2>&1 || die \
+        "Ollama is not installed. Install it with: curl -fsSL https://ollama.com/install.sh | sh"
+}
+
+secret_tool_available() {
+    [[ "${SAMURAI_AI_FORCE_FILE:-0}" != "1" ]] && command -v secret-tool >/dev/null 2>&1
+}
+
+file_get_credential() {
+    local provider="$1"
+    [[ -f "$CRED_FILE" ]] || return 1
+    awk -F '\t' -v p="$provider" '$1 == p { print $2; found=1; exit } END { exit(found ? 0 : 1) }' "$CRED_FILE"
+}
+
+file_set_credential() {
+    local provider="$1" key="$2" tmp
+    mkdir -p "$CONFIG_DIR"
+    touch "$CRED_FILE"
+    chmod 600 "$CRED_FILE"
+    tmp=$(mktemp "${CRED_FILE}.XXXXXX")
+    chmod 600 "$tmp"
+    awk -F '\t' -v p="$provider" '$1 != p' "$CRED_FILE" > "$tmp"
+    printf '%s\t%s\n' "$provider" "$key" >> "$tmp"
+    mv "$tmp" "$CRED_FILE"
+}
+
+file_remove_credential() {
+    local provider="$1" tmp
+    [[ -f "$CRED_FILE" ]] || return 0
+    tmp=$(mktemp "${CRED_FILE}.XXXXXX")
+    chmod 600 "$tmp"
+    awk -F '\t' -v p="$provider" '$1 != p' "$CRED_FILE" > "$tmp"
+    mv "$tmp" "$CRED_FILE"
+}
+
+cmd_chat() {
+    local model="" message=""
+    while (($# > 0)); do
+        case "$1" in
+            -m|--model)
+                (($# >= 2)) || die "Option $1 requires a model id"
+                model="$2"
+                shift 2
                 ;;
-            get)
-                if [ -z "$3" ]; then
-                    echo "Usage: samurai-ai credentials get <provider>"
-                    exit 1
-                fi
-                grep "provider=$3" ~/.config/samurai/credentials | head -1 | cut -d= -f3-
+            -h|--help)
+                usage
+                return 0
                 ;;
-            remove)
-                if [ -z "$3" ]; then
-                    echo "Usage: samurai-ai credentials remove <provider>"
-                    exit 1
-                fi
-                grep -v "provider=$3" ~/.config/samurai/credentials > ~/.config/samurai/credentials.tmp
-                mv ~/.config/samurai/credentials.tmp ~/.config/samurai/credentials
-                echo "Credential for $3 removed"
+            --)
+                shift
+                message="$*"
+                break
+                ;;
+            -*)
+                die "Unknown option: $1"
+                ;;
+            *)
+                message="${message:+$message }$1"
+                shift
                 ;;
         esac
-        ;;
-    
-    *)
-        echo "Samurai AI Assistant"
-        echo "Usage: samurai-ai <command>"
-        echo ""
-        echo "Commands:"
-        echo "  chat <message>        - Chat with local AI model"
-        echo "  install-model <id>    - Install a model"
-        echo "  list-models           - List available models"
-        echo "  status                - Show inference status"
-        echo "  gpu-info              - Check GPU availability"
-        echo "  cpu-info              - Check CPU information"
-        echo "  memory-budget         - Show memory budget info"
-        echo "  set-default <model>   - Set default model"
-        echo "  check-compatibility   - Check model compatibility"
-        echo "  credentials <get|set|remove> - Manage credentials"
-        ;;
-esac
+    done
+    [[ -n "$message" ]] || die "Usage: samurai-ai chat [--model ID] <message>"
+    if [[ -z "$model" ]]; then
+        model=$(get_default_model) || die "No default model set. Run: samurai-ai set-default <model-id>"
+    fi
+    require_ollama
+    ollama run "$model" "$message"
+}
+
+cmd_install_model() {
+    [[ -n "${1:-}" ]] || die "Usage: samurai-ai install-model <model-id>"
+    require_ollama
+    ollama pull "$1"
+}
+
+cmd_delete_model() {
+    [[ -n "${1:-}" ]] || die "Usage: samurai-ai delete-model <model-id>"
+    require_ollama
+    ollama rm "$1"
+}
+
+cmd_list_models() {
+    require_ollama
+    ollama list
+}
+
+cmd_status() {
+    local model credentials
+    if model=$(get_default_model); then
+        log "Default model: $model"
+    else
+        log "Default model: (not set)"
+    fi
+    if command -v ollama >/dev/null 2>&1; then
+        ollama ps || true
+        if command -v systemctl >/dev/null 2>&1; then
+            log "ollama.service: $(systemctl is-active ollama 2>/dev/null || true)"
+        fi
+    else
+        log "Ollama: not installed"
+    fi
+    if secret_tool_available; then
+        credentials="Secret Service (secret-tool)"
+    else
+        credentials="file fallback: $CRED_FILE (mode 600, NOT encrypted)"
+    fi
+    log "Credentials: $credentials"
+}
+
+cmd_gpu_info() {
+    local gpus
+    if ! command -v lspci >/dev/null 2>&1; then
+        die "lspci is not installed. Install pciutils."
+    fi
+    gpus=$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller' || true)
+    if [[ -z "$gpus" ]]; then
+        log "No GPU detected or only integrated graphics"
+        return 0
+    fi
+    printf '%s\n' "$gpus"
+    if grep -qi nvidia <<<"$gpus"; then
+        log "Vendor: NVIDIA"
+    elif grep -qi amd <<<"$gpus"; then
+        log "Vendor: AMD"
+    elif grep -qi intel <<<"$gpus"; then
+        log "Vendor: Intel"
+    fi
+}
+
+cmd_cpu_info() {
+    if command -v lscpu >/dev/null 2>&1; then
+        lscpu
+    elif [[ -r /proc/cpuinfo ]]; then
+        head -n 20 /proc/cpuinfo
+    else
+        die "Cannot read CPU information"
+    fi
+}
+
+cmd_memory_budget() {
+    [[ -r /proc/meminfo ]] || die "Cannot read /proc/meminfo"
+    local mem_kb mem_mb recommended_mb
+    mem_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+    mem_mb=$((mem_kb / 1024))
+    recommended_mb=$((mem_mb / 8))
+    if command -v free >/dev/null 2>&1; then
+        free -h
+    fi
+    printf 'Total memory: %d MiB\n' "$mem_mb"
+    printf 'Suggested AI model budget (1/8 of RAM): ~%d MiB\n' "$recommended_mb"
+}
+
+cmd_set_default() {
+    [[ -n "${1:-}" ]] || die "Usage: samurai-ai set-default <model-id>"
+    set_default_model "$1"
+    log "Default model set to: $1"
+}
+
+cmd_get_default() {
+    local model
+    model=$(get_default_model) || die "No default model set"
+    printf '%s\n' "$model"
+}
+
+cmd_configure() {
+    local model="" install=0
+    while (($# > 0)); do
+        case "$1" in
+            --model|-m)
+                (($# >= 2)) || die "Option $1 requires a model id"
+                model="$2"
+                shift 2
+                ;;
+            --install)
+                install=1
+                shift
+                ;;
+            -h|--help)
+                usage
+                return 0
+                ;;
+            *)
+                die "Unknown option: $1"
+                ;;
+        esac
+    done
+    [[ -n "$model" ]] || die "Usage: samurai-ai configure --model <model-id> [--install]"
+    set_default_model "$model"
+    log "Default model set to: $model"
+    if ((install)); then
+        require_ollama
+        ollama pull "$model"
+    fi
+}
+
+cmd_check_compatibility() {
+    local model="${1:-}" params total_mb est_mb verdict
+    if [[ -z "$model" ]]; then
+        model=$(get_default_model) || die "Usage: samurai-ai check-compatibility <model-id>"
+    fi
+    [[ -r /proc/meminfo ]] || die "Cannot read /proc/meminfo"
+    total_mb=$(awk '/^MemTotal:/ { printf "%d", $2 / 1024 }' /proc/meminfo)
+    if [[ "$model" =~ ([0-9]+([.][0-9]+)?)[bB] ]]; then
+        params="${BASH_REMATCH[1]}"
+    else
+        log "Model: $model"
+        log "System RAM: ${total_mb} MiB"
+        log "Estimated parameter size: unknown"
+        log "Verdict: cannot estimate; check the model card for memory requirements"
+        return 0
+    fi
+    est_mb=$(awk -v p="$params" 'BEGIN { printf "%d", (p * 700) + 1024 }')
+    if ((est_mb < total_mb)); then
+        verdict="likely fits (CPU/GPU inference, 4-bit estimate)"
+    else
+        verdict="may not fit; close other applications or use a smaller/quantized model"
+    fi
+    log "Model: $model"
+    log "Estimated parameters: ${params}B"
+    log "Estimated minimum RAM: ~${est_mb} MiB"
+    log "System RAM: ${total_mb} MiB"
+    log "Verdict: $verdict"
+}
+
+cmd_credentials() {
+    local sub="${1:-}"
+    (($# > 0)) && shift
+    case "$sub" in
+        set)
+            local provider="${1:-}" key="${2:-}"
+            [[ -n "$provider" && -n "$key" ]] || die "Usage: samurai-ai credentials set <provider> <key>"
+            if secret_tool_available; then
+                if printf '%s' "$key" | secret-tool store --label="Samurai AI ($provider)" service samurai-ai provider "$provider"; then
+                    log "Credential for $provider stored in the Secret Service"
+                    return 0
+                fi
+                warn "Secret Service unavailable; falling back to a 0600 file"
+            fi
+            file_set_credential "$provider" "$key"
+            log "Credential for $provider stored in $CRED_FILE (mode 600, not encrypted)"
+            ;;
+        get)
+            local provider="${1:-}" key=""
+            [[ -n "$provider" ]] || die "Usage: samurai-ai credentials get <provider>"
+            if secret_tool_available; then
+                key=$(secret-tool lookup service samurai-ai provider "$provider" 2>/dev/null || true)
+            fi
+            if [[ -z "$key" ]]; then
+                key=$(file_get_credential "$provider" || true)
+            fi
+            [[ -n "$key" ]] || die "No credential stored for $provider"
+            printf '%s\n' "$key"
+            ;;
+        remove)
+            local provider="${1:-}"
+            [[ -n "$provider" ]] || die "Usage: samurai-ai credentials remove <provider>"
+            if secret_tool_available; then
+                secret-tool clear service samurai-ai provider "$provider" 2>/dev/null || true
+            fi
+            file_remove_credential "$provider"
+            log "Credential for $provider removed"
+            ;;
+        ""|-h|--help)
+            usage_credentials
+            [[ -n "$sub" ]] || return 1
+            ;;
+        *)
+            die "Unknown credentials command: $sub"
+            ;;
+    esac
+}
+
+main() {
+    local cmd="${1:-}"
+    (($# > 0)) && shift
+    case "$cmd" in
+        chat) cmd_chat "$@" ;;
+        install-model) cmd_install_model "$@" ;;
+        delete-model) cmd_delete_model "$@" ;;
+        list-models) cmd_list_models "$@" ;;
+        status) cmd_status "$@" ;;
+        gpu-info) cmd_gpu_info "$@" ;;
+        cpu-info) cmd_cpu_info "$@" ;;
+        memory-budget) cmd_memory_budget "$@" ;;
+        set-default) cmd_set_default "$@" ;;
+        get-default) cmd_get_default "$@" ;;
+        configure) cmd_configure "$@" ;;
+        check-compatibility) cmd_check_compatibility "$@" ;;
+        credentials) cmd_credentials "$@" ;;
+        ""|-h|--help|help) usage ;;
+        *) die "Unknown command: $cmd (run: samurai-ai --help)" ;;
+    esac
+}
+
+main "$@"

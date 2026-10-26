@@ -1,0 +1,63 @@
+# Samurai Linux package list (installed inside the live-build chroot).
+# Debian 13 "trixie". Keep package names verified against trixie.
+
+# Desktop environment
+kde-standard
+sddm
+kde-config-sddm
+plasma-desktop
+plasma-workspace
+plasma-nm
+plasma-pa
+plasma-browser-integration
+konsole
+dolphin
+ark
+kate
+gwenview
+okular
+kde-spectacle
+xserver-xorg
+xwayland
+pipewire
+pipewire-pulse
+wireplumber
+alsa-utils
+xdg-user-dirs
+xdg-utils
+bluedevil
+firefox-esr
+fonts-noto-cjk
+fonts-noto-color-emoji
+fonts-dejavu
+
+# Live system (required for a bootable live image)
+live-boot
+live-config
+live-config-systemd
+live-tools
+user-setup
+initramfs-tools
+linux-image-amd64
+
+# System and developer basics
+pciutils
+libsecret-tools
+ca-certificates
+curl
+wget
+git
+sudo
+vim
+python3
+python3-venv
+build-essential
+cmake
+ninja-build
+nftables
+apparmor
+apparmor-profiles
+
+# Gaming runtime (Steam is installed after first boot with samurai-gaming)
+gamemode
+mangohud

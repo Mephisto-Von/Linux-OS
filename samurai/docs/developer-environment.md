@@ -1,5 +1,8 @@
 # Samurai Developer Environment
 
+> `samurai-editor` is a planned helper and is not included yet. Install editors
+> with `apt` until it exists.
+
 ## Core Tools
 
 ### Version Control and SSH
@@ -35,13 +38,7 @@
 - JetBrains IDEs (IntelliJ, PyCharm, WebStorm) via snaps or scripts
 
 ### Editor Configuration
-```bash
-# Install Samurai editor configs
-samurai-editor install --all
 
-# Apply Samurai theme to Neovim
-ln -sf /opt/samurai/configs/nvim ~/.config/nvim
-
-# VS Code settings sync
-code --user-data-dir ~/.vscode-samurai --extensions-dir ~/.vscode-extensions
-```
+The Samurai editor configuration bundle is not shipped yet. Until it is,
+install and configure editors yourself (for example `apt-get install neovim`
+followed by your own `~/.config/nvim`).

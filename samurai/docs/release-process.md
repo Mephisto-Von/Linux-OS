@@ -7,14 +7,14 @@
   `unstable` channels
 
 ## Release Pipeline
-1. Verify the build host (50 GB+ disk, 8 GB+ RAM, x86_64)
-2. Bootstrap and customize the rootfs (`build-guide.md`, steps 2-6)
-3. Generate the ISO with `xorriso`
-4. Calculate checksums and sign:
+1. Verify the build host (50 GB+ disk, 4 GB+ RAM, x86_64)
+2. Run `bash build/build.sh --check`
+3. Build the ISO with `sudo bash build/build.sh` (writes `dist/*.iso` and `.sha256`)
+4. Sign it with an armored detached signature:
    ```bash
-   sha256sum samurai.iso > samurai.sha256
-   sha1sum samurai.iso > samurai.sha1
-   gpg --armor --output samurai.iso.sig samurai.iso
+   cd dist
+   gpg --armor --detach-sign --output samurai-linux-YYYY.MM.DD-amd64.iso.sig \
+       samurai-linux-YYYY.MM.DD-amd64.iso
    ```
 5. Run the test suite (`testing.md`)
 6. Validate against the acceptance criteria below

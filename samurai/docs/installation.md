@@ -2,33 +2,18 @@
 
 ## Bootable ISO
 
-### ISO Generation
+The ISO is built with Debian `live-build`; see
+[`build/README.md`](../../build/README.md). The old direct `xorriso` recipe was
+invalid (it produced a data ISO, not a bootable live image).
+
 ```bash
-# Build ISO from customized rootfs
-xorriso -as iso -r -fjoliet-long -l -V "Samurai Linux" \
-  -o /output/samurai.iso /path/to/rootfs/
+sudo bash build/build.sh
+bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso --gui
 ```
 
-### GRUB Configuration for Live System
-```grub
-menuentry 'Samurai Linux' {
-    set isofile=/samurai.iso
-    linux (isofile)/boot/vmlinuz boot=live config quiet
-    initrd (isofile)/boot/initrd.img
-}
-
-menuentry 'Samurai Live (Failsafe)' {
-    set isofile=/samurai.iso
-    linux (isofile)/boot/vmlinuz boot=live config apm=off acpi=off nodma quiet
-    initrd (isofile)/boot/initrd.img
-}
-
-menuentry 'Install Samurai Linux' {
-    set isofile=/samurai.iso
-    linux (isofile)/boot/vmlinuz boot=install quiet
-    initrd (isofile)/boot/initrd.img
-}
-```
+> The Calamares-based installer and first-boot wizard described below are the
+> target design. The current ISO boots a live KDE Plasma session but does not yet
+> ship an installer.
 
 ## Installation Steps
 
@@ -90,10 +75,10 @@ samurai-install select-profile ai-dev
 curl -s https://ollama.com/download/ollama-linux-amd64.tar.gz | tar -xz -C /usr/local/bin
 
 # Pull default model
-ollama pull llama2
+ollama pull llama3.2:3b
 
 # Configure Samurai AI Assistant
-samurai-ai configure --model llama2
+samurai-ai configure --model llama3.2:3b
 
 # Test inference
 samurai-ai chat "Hello, how are you?"
@@ -135,4 +120,4 @@ samurai-theme auto
 - **Live ISO rescue** - boot from ISO and recover system
 - **Backup configuration** - `/home/.samurai-backup/`
 - **Repository recovery** - restore Samurai package repo
-- **Theme recovery** - reinstall from `/opt/samurai/themes/`
+- **Theme recovery** - reinstall from `/usr/share/samurai/themes/`

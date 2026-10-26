@@ -1,5 +1,11 @@
 # Samurai Security Model
 
+> **Status:** the live ISO uses Debian's default security configuration plus the
+> packages in `build/config/package-lists/`. Custom firewall rules, SSH
+> hardening, unattended-upgrades, and a signed APT repository are **not
+> implemented yet**. Items mentioning the installer describe the target design.
+> ISO signing is available through `build/build.sh` when `SAMURAI_SIGN_KEY` is set.
+
 ## Secure Defaults
 
 ### System Access
@@ -22,9 +28,9 @@
 ## Package and Repository Security
 
 ### Signing
-- **APT repository signing** - every package repository signed with a project GPG key
-- **ISO checksums** - SHA-256 and SHA-1 published with every release
-- **ISO signature** - GPG-armored detached signature (`samurai.iso.sig`)
+- **APT repository signing** - planned; no Samurai APT repository is published yet
+- **ISO checksums** - SHA-256 published with every release
+- **ISO signature** - GPG-armored detached signature (`samurai-linux-<date>-amd64.iso.sig`)
 
 ### Updates
 - **Security upgrades** - unattended-upgrades configured for critical fixes

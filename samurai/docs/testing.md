@@ -3,49 +3,53 @@
 ## Test Levels
 
 ### 1. Script Smoke Tests
-Run on every change to `samurai/scripts/`:
+Run `bash tests/smoke.sh` on every change. It parses every shell script,
+runs ShellCheck when available, and checks:
+
 ```bash
-# Theme manager
+# Theme manager installs a real .colors file and persists the selection
+samurai-theme set kuro
 samurai-theme list
-samurai-theme kuro
-samurai-theme shiro
-samurai-theme auto
+samurai-theme status
 
-# AI CLI (no model required for these)
-samurai-ai              # usage output lists all commands
-samurai-ai gpu-info
-samurai-ai cpu-info
-samurai-ai memory-budget
-samurai-ai status
+# AI CLI: default model and credentials (no Ollama model required)
+samurai-ai --help
+samurai-ai set-default llama3.2:3b
+samurai-ai get-default
+samurai-ai credentials set openai test-key
+samurai-ai credentials get openai
+samurai-ai credentials remove openai
 
-# Gaming profile
-samurai-gaming install-profile
+# Gaming launcher argument handling (uses a fake steam binary)
+samurai-gaming steam --foo
 ```
 
+Do not run `samurai-gaming install-profile` as a smoke test: it installs packages
+and modifies the system.
+
 ### 2. Build Pipeline Tests
-- `debootstrap` completes without errors for the target architecture
-- Chroot package installation succeeds for every selected profile
-- `xorriso` produces a readable ISO (verified with `isoinfo`/`xorriso -indev ... -toc`)
+- `bash build/build.sh --check` passes (host, tools, disk, config generation)
+- `lb build` completes and the hybrid ISO appears under `dist/`
 - Checksums and GPG signature verify:
   ```bash
-  sha256sum -c samurai.sha256
-  gpg --verify samurai.iso.sig samurai.iso
+  cd dist
+  sha256sum -c samurai-linux-*.iso.sha256
+  gpg --verify samurai-linux-*.iso.sig samurai-linux-*.iso
   ```
 
 ### 3. Boot Tests (QEMU)
 ```bash
-# Standard boot test
-qemu-system-x86_64 -cdrom samurai.iso -m 4096 -display none -boot d
+# Headless serial check (180 s timeout)
+bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso
 
-# With KVM acceleration
-qemu-system-x86_64 -cdrom samurai.iso -m 4096 -enable-kvm -boot d
-
-# Failsafe entry
-qemu-system-x86_64 -cdrom samurai.iso -m 2048 -display none
+# Interactive desktop check
+bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso --gui
 ```
-Pass criteria: reaches the KDE Plasma desktop or installer within 120s.
+Pass criteria: the serial log shows kernel/systemd boot messages, and the GUI run
+reaches the KDE Plasma live session as user `samurai` within 120s. The current
+ISO has no installer.
 
-### 4. Installation Tests
+### 4. Installation Tests (target design; not yet available)
 - Guided partitioning completes and system reboots into installed OS
 - LUKS-encrypted install unlocks with passphrase and boots
 - Each profile (minimal, developer, gaming, AI/dev, full) installs cleanly
@@ -68,7 +72,7 @@ Pass criteria: reaches the KDE Plasma desktop or installer within 120s.
 ### 7. Gaming Tests (on declared supported configurations)
 - Steam installs and launches via `samurai-gaming steam`
 - Proton runs at least one Windows title
-- GameMode engages (`systemctl status gamemoded`)
+- GameMode engages (`systemctl --user status gamemoded`)
 - MangoHUD overlay displays (`MANGOHUD=1 %command%`)
 - Controller detected and usable
 
@@ -91,6 +95,7 @@ CPU utilization: 2-5% at desktop
 | Performance | Boot time, idle RAM, idle CPU |
 
 ## Automating Tests
-- Script smoke tests run in CI on every commit
-- Boot/install tests run manually per release (see `release-process.md`)
+- `tests/smoke.sh` runs in GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request
+- The `live-build` job validates `build/auto/config` in a `debian:trixie` container
+- Boot/install tests run manually or on a self-hosted runner (`.github/workflows/build-iso.yml`)
 - Defects found are logged and triaged; critical defects block release

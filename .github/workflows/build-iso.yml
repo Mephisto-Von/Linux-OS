@@ -1,0 +1,40 @@
+name: Build ISO
+
+# Runs on a self-hosted Linux runner with at least 50 GiB free disk.
+# See build/README.md for the runner requirements.
+on:
+  workflow_dispatch:
+    inputs:
+      sign:
+        description: "GPG-sign the ISO (requires SAMURAI_SIGN_KEY secret)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  iso:
+    name: Build live ISO
+    runs-on: [self-hosted, linux, x64, samurai-builder]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends live-build debootstrap xorriso squashfs-tools gnupg
+      - name: Check host
+        run: sudo -E bash build/build.sh --check
+      - name: Build ISO
+        env:
+          SAMURAI_SIGN_KEY: ${{ inputs.sign && secrets.SAMURAI_SIGN_KEY || '' }}
+        run: sudo -E bash build/build.sh
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: samurai-linux-iso
+          path: |
+            dist/*.iso
+            dist/*.sha256
+            dist/*.sig
+          if-no-files-found: error

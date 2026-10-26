@@ -1,33 +1,64 @@
-#!/bin/bash
-# Script to analyze ISO files using REA after project building
+#!/usr/bin/env bash
+# Analyze an ISO with REA after a build.
 # Usage: ./scripts/analyze-iso.sh <iso-file-path>
+set -euo pipefail
 
-ISO_FILE="$1"
+ISO_FILE="${1:-}"
+EXTRACT_DIR=""
+MOUNT_DIR=""
+TMP_DIR=""
 
-if [ -z "$ISO_FILE" ]; then
-    echo "Usage: $0 <iso-file-path>"
+usage() {
+    printf 'Usage: %s <iso-file-path>\n' "$0"
+}
+
+cleanup() {
+    if [[ -n "$MOUNT_DIR" && -d "$MOUNT_DIR" ]] && command -v mountpoint >/dev/null 2>&1 && mountpoint -q "$MOUNT_DIR"; then
+        umount "$MOUNT_DIR" 2>/dev/null || true
+    fi
+    if [[ -n "$TMP_DIR" ]]; then
+        rm -rf "$TMP_DIR"
+    fi
+}
+trap cleanup EXIT
+
+if [[ -z "$ISO_FILE" ]]; then
+    usage
+    exit 1
+fi
+if [[ ! -f "$ISO_FILE" ]]; then
+    printf 'Error: file not found: %s\n' "$ISO_FILE" >&2
     exit 1
 fi
 
-if [ ! -f "$ISO_FILE" ]; then
-    echo "Error: File $ISO_FILE not found"
+TMP_DIR=$(mktemp -d)
+EXTRACT_DIR="$TMP_DIR/extract"
+mkdir -p "$EXTRACT_DIR"
+
+printf 'Extracting ISO to %s\n' "$EXTRACT_DIR"
+if command -v 7z >/dev/null 2>&1; then
+    7z x "$ISO_FILE" -o"$EXTRACT_DIR" -y >/dev/null
+elif command -v xorriso >/dev/null 2>&1; then
+    xorriso -osirrox on -indev "$ISO_FILE" -extract / "$EXTRACT_DIR" >/dev/null 2>&1
+elif command -v mount >/dev/null 2>&1; then
+    MOUNT_DIR="$TMP_DIR/mnt"
+    mkdir -p "$MOUNT_DIR"
+    mount -o loop,ro "$ISO_FILE" "$MOUNT_DIR"
+    EXTRACT_DIR="$MOUNT_DIR"
+else
+    printf 'Error: install 7z, xorriso, or util-linux mount to extract the ISO\n' >&2
     exit 1
 fi
 
-# Extract ISO to temporary directory
-EXTRACT_DIR=$(mktemp -d)
-echo "Extracting ISO to $EXTRACT_DIR"
-
-# Try to extract using 7z or mount
-if command -v 7z &>/dev/null; then
-    7z x "$ISO_FILE" -o"$EXTRACT_DIR" -y 2>/dev/null || echo "7z extraction failed, trying other methods"
-elif command -v mount &>/dev/null; then
-    mount -o loop,ro "$ISO_FILE" /mnt/iso 2>/dev/null && echo "ISO mounted" || echo "mount failed"
+if [[ -z "$(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+    printf 'Error: extraction produced no files\n' >&2
+    exit 1
 fi
 
-# Run REA analysis on extracted content
-echo "Running REA analysis..."
-npx rea analyze "$EXTRACT_DIR" 2>&1
+if ! command -v npx >/dev/null 2>&1; then
+    printf 'Error: npx is required to run REA (install Node.js)\n' >&2
+    exit 1
+fi
 
-# Cleanup
-rm -rf "$EXTRACT_DIR"
+printf 'Running REA analysis...\n'
+npx --yes rea analyze "$EXTRACT_DIR"

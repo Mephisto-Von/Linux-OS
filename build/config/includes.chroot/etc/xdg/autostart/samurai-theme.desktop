@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Samurai Theme
+Comment=Apply the saved Samurai color scheme
+Exec=/usr/local/bin/samurai-theme default
+OnlyShowIn=KDE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

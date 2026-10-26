@@ -22,15 +22,14 @@
 
 ### Configuration
 ```bash
-# Set Kuro theme
+# Apply and persist Kuro
+samurai-theme kuro
+
+# Or use the explicit form
 samurai-theme set kuro
-
-# Apply to KDE Plasma
-qdbus org.kde.KWin /KWin setTheme "Samurai Kuro"
-
-# Set colorscheme
-plasma-apply-colorscheme /opt/samurai/themes/kuro/colorscheme.kcm
 ```
+
+Installed scheme: `~/.local/share/color-schemes/samurai-kuro.colors`.
 
 ## Shiro - Light Theme
 
@@ -54,15 +53,14 @@ plasma-apply-colorscheme /opt/samurai/themes/kuro/colorscheme.kcm
 
 ### Configuration
 ```bash
-# Set Shiro theme
+# Apply and persist Shiro
+samurai-theme shiro
+
+# Or use the explicit form
 samurai-theme set shiro
-
-# Apply to KDE Plasma
-qdbus org.kde.KWin /KWin setTheme "Samurai Shiro"
-
-# Set colorscheme
-plasma-apply-colorscheme /opt/samurai/themes/shiro/colorscheme.kcm
 ```
+
+Installed scheme: `~/.local/share/color-schemes/samurai-shiro.colors`.
 
 ## Theme Selector
 - **Persistent theme selector** in System Settings -> Appearance

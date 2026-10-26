@@ -5,9 +5,9 @@ cybersecurity, gaming, daily desktop productivity, privacy, and high performance
 
 - **Base**: Debian Stable (Trixie)
 - **Desktop**: KDE Plasma
-- **Themes**: Kuro (Dark, `#111214`) and Shiro (Light, `#F5F0E6`) with a Japanese
-  Samurai-inspired design — brushstroke artwork, waves, mountains, moonlight,
-  lacquered black surfaces, crimson and gold accents.
+- **Themes**: Kuro (Dark, `#111214`) and Shiro (Light, `#F5F0E6`) KDE color
+  schemes, with a Japanese Samurai-inspired palette (crimson and gold accents).
+  Wallpapers, icons, and cursors are planned.
 
 ## Repository Layout
 
@@ -15,22 +15,25 @@ cybersecurity, gaming, daily desktop productivity, privacy, and high performance
 .
 ├── README.md                    - This file
 ├── LICENSE                      - Project license
-├── RELEASE_DESCRIPTION.md       - Build status + 7-step ISO continuation pipeline
+├── RELEASE_DESCRIPTION.md       - Historical build log (superseded)
+├── build/                       - live-build ISO build system (start here)
+│   ├── README.md                - Host requirements, build, signing, QEMU test
+│   ├── build.sh                 - Preflight + lb clean + lb build + artifacts
+│   ├── qemu-test.sh             - Headless or interactive boot test
+│   ├── auto/config              - live-build configuration
+│   └── config/                  - Package lists, hooks, includes.chroot
+├── tests/smoke.sh               - ShellCheck + CLI smoke tests
 ├── samurai/
 │   ├── README.md                - Edition overview and quick links
-│   ├── docs/
-│   │   ├── architecture.md      - Full system architecture specification
-│   │   └── build-guide.md       - 12-step reproducible build pipeline
-│   ├── configs/                 - Configuration documentation (AI, gaming, themes, ...)
-│   ├── scripts/                 - System scripts installed into the rootfs
-│   ├── themes/                  - Kuro / Shiro color schemes
-│   ├── iso/                     - ISO assembly directory (populated at build time)
-│   ├── packages/                - Custom .deb build output
-│   └── templates/               - Template files for installation
-└── scripts/
-    ├── analyze-iso.sh           - Analyze a built ISO with REA
-    ├── post-build-workflow.sh   - Post-build workflow: REA analysis + Heretic
-    └── use-heretic.py           - Heretic model decensoring wrapper
+│   ├── docs/                    - Maintained specifications
+│   ├── configs/                 - Legacy copies; prefer docs/
+│   ├── scripts/                 - samurai-ai, samurai-theme, samurai-gaming
+│   └── themes/{kuro,shiro}/     - KDE .colors schemes + palette CSS
+├── scripts/
+│   ├── analyze-iso.sh           - Analyze a built ISO with REA
+│   ├── post-build-workflow.sh   - Optional REA + Heretic workflow
+│   └── use-heretic.py           - Heretic model wrapper
+└── .github/workflows/           - CI + self-hosted ISO build
 ```
 
 ## Quick Start
@@ -45,16 +48,19 @@ samurai-theme list      # List available themes
 
 ### AI Assistant
 ```bash
-samurai-ai chat "Hello"           # Chat with the local model
+samurai-ai chat "Hello"           # Chat with the default model
+samurai-ai install-model <id>     # Pull a model via Ollama
+samurai-ai delete-model <id>      # Remove a local model
+samurai-ai list-models            # List installed models
+samurai-ai set-default <model>    # Set the default model
+samurai-ai get-default            # Print the default model
+samurai-ai configure --model <id> --install   # Set and pull a model
+samurai-ai status                 # Inference and credential status
 samurai-ai gpu-info               # GPU detection
 samurai-ai cpu-info               # CPU detection
-samurai-ai memory-budget          # Memory status
-samurai-ai install-model <id>     # Pull a model via Ollama
-samurai-ai list-models            # List available models
-samurai-ai set-default <model>    # Set the default model
-samurai-ai status                 # Inference status
-samurai-ai check-compatibility    # Model/hardware compatibility check
-samurai-ai credentials get|set|remove   # Secure credential storage
+samurai-ai memory-budget          # RAM and suggested AI budget
+samurai-ai check-compatibility <id>  # Estimate whether a model fits
+samurai-ai credentials get|set|remove <provider> [key]  # Secret Service / 0600 fallback
 ```
 
 ### Gaming
@@ -66,64 +72,58 @@ samurai-gaming lutris            # Launch Lutris with MangoHUD
 
 ## Building the ISO
 
-The full pipeline is documented in:
-
-1. [`samurai/docs/build-guide.md`](samurai/docs/build-guide.md) — the 12-step
-   reproducible build (debootstrap → KDE Plasma + Samurai theming → xorriso →
-   checksums → QEMU boot tests → release signing)
-2. [`RELEASE_DESCRIPTION.md`](RELEASE_DESCRIPTION.md) — condensed 7-step
-   continuation checklist with acceptance criteria
+The build uses Debian's `live-build`; the old hand-written `debootstrap` +
+`xorriso` recipe was invalid and has been replaced. See
+[`build/README.md`](build/README.md) for the full guide.
 
 ### Build host requirements
 
 | Requirement | Minimum | Recommended |
 |---|---|---|
+| OS | Debian 13 (Trixie) | Debian 13 |
 | Free disk | 50 GB | 100 GB |
-| RAM | 8 GB | 16 GB |
+| RAM | 4 GB | 8 GB |
 | Architecture | x86_64 | x86_64 |
-| Tools | `debootstrap`, `xorriso`, `gnupg`, `dpkg-dev` | + `sbuild`, QEMU |
+| Tools | `live-build`, `debootstrap`, `xorriso`, `squashfs-tools` | + QEMU, GNUPG |
 
-### Pipeline overview
+### Build and test
 
 ```bash
-# 1. Verify the host
-df -h / && free -h && uname -m && which debootstrap xorriso
+sudo apt-get update
+sudo apt-get install -y live-build debootstrap xorriso squashfs-tools gnupg
 
-# 2. Bootstrap the Debian base
-debootstrap --arch=x86_64 trixie /samurai/rootfs http://deb.debian.org/debian/
+# Build the ISO and collect it under dist/
+sudo bash build/build.sh
 
-# 3. Integrate KDE Plasma + Samurai configuration
-chroot /samurai/rootfs apt-get install -y kde-plasma-desktop
-cp -r samurai/themes/kuro /samurai/rootfs/usr/share/themes/samurai-kuro
-cp -r samurai/themes/shiro /samurai/rootfs/usr/share/themes/samurai-shiro
+# Optional: sign it (SAMURAI_SIGN_KEY is your GPG key id)
+sudo -E SAMURAI_SIGN_KEY="<key-id>" bash build/build.sh
 
-# 4. Assemble and generate the ISO
-rsync -a /samurai/rootfs/ iso/
-xorriso -as iso -r -fjoliet-long -l -V "Samurai Linux" -o samurai.iso iso/
-
-# 5. Checksum and sign
-sha256sum samurai.iso > samurai.sha256
-gpg --armor --output samurai.iso.sig samurai.iso
-
-# 6. Boot-test
-qemu-system-x86_64 -cdrom samurai.iso -m 4096 -display none -boot d
+# Boot-test in QEMU
+bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso --gui
 ```
+
+Output: `dist/samurai-linux-YYYY.MM.DD-amd64.iso`, its `.sha256`, and an
+armored detached `.sig` when signing is enabled.
+
+> Build on a Linux filesystem, not on `/mnt/c` or `/mnt/d` under WSL.
 
 ## Current Status
 
 | Component | Status |
 |---|---|
-| Architecture & build documentation | ✅ Complete |
-| Kuro / Shiro themes | ✅ Complete and verified |
-| `samurai-ai` CLI (13 commands) | ✅ Working |
-| `samurai-theme` CLI | ✅ Working |
-| `samurai-gaming` CLI | ✅ Working |
-| Repository pushed to `origin/main` | ✅ Done (`c0e88d9`) |
-| Bootable ISO generation | ⚠️ Requires a build host with 50 GB+ disk and 8 GB+ RAM |
+| Architecture & design documentation | ✅ Complete (aspirational in places) |
+| Kuro / Shiro KDE `.colors` schemes | ✅ Implemented; wallpapers/icons/cursors pending |
+| `samurai-ai` CLI | ✅ Implemented, smoke-tested |
+| `samurai-theme` CLI | ✅ Applies real KDE color schemes |
+| `samurai-gaming` CLI | ✅ Fixed for Debian (Steam via `steam-installer`) |
+| `live-build` ISO pipeline | ✅ Scaffolded; CI job validates config |
+| CI (ShellCheck + smoke tests) | ✅ Workflow included (not yet run on GitHub) |
+| Bootable ISO boot-tested | ⚠️ Not yet run in this repository |
+| Calamares installer / first boot | ❌ Not implemented |
+| Signed APT repository | ❌ Not implemented |
 
-ISO generation could not run in the original (constrained) build environment —
-see [RELEASE_DESCRIPTION.md](RELEASE_DESCRIPTION.md) for the continuation
-checklist and the 17 release acceptance criteria.
+`RELEASE_DESCRIPTION.md` is retained as a historical build log. Its commands are
+superseded by `build/README.md` and should not be used.
 
 ## Post-Build Tooling
 
@@ -137,6 +137,16 @@ checklist and the 17 release acceptance criteria.
 # Decensor a model with Heretic (requires: pip install heretic-llm)
 python3 scripts/use-heretic.py google/gemma-3-12b-it
 ```
+
+## Testing
+
+```bash
+# ShellCheck + CLI smoke tests (Debian container in CI)
+bash tests/smoke.sh
+```
+
+The workflow at `.github/workflows/ci.yml` runs the same checks in a
+`debian:trixie` container and validates the live-build configuration.
 
 ## License
 
