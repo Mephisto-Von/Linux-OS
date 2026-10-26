@@ -1,8 +1,14 @@
 #!/bin/sh
-# Ensure the live kernel writes to the serial console for headless testing.
+# Make the live image boot unattended on headless machines and log to serial.
 # live-build already passes --bootappend-live; this is a safety net for
 # bootloader configurations that drop the console= arguments.
 set -eu
+
+# The stock isolinux.cfg uses "timeout 0", which waits at the boot menu
+# forever. A headless VM (or a server with no keyboard) never gets past it.
+if [ -f isolinux/isolinux.cfg ]; then
+    sed -i -E 's/^timeout[[:space:]]+0$/timeout 50/' isolinux/isolinux.cfg
+fi
 
 for cfg in isolinux/live.cfg boot/grub/grub.cfg; do
     [ -f "$cfg" ] || continue

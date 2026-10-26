@@ -129,6 +129,8 @@ grep -q 'branding: samurai' "$REPO_ROOT/build/config/hooks/normal/0100-samurai.h
     || fail "Calamares branding is not selected"
 assert_file "$REPO_ROOT/build/verify-iso.sh"
 assert_file "$REPO_ROOT/build/config/hooks/normal/0100-serial.hook.binary"
+grep -Fq 'timeout[[:space:]]+0$/timeout 50/' "$REPO_ROOT/build/config/hooks/normal/0100-serial.hook.binary" \
+    || fail "the live ISO boot menu does not auto-boot"
 grep -q 'bash build/verify-iso.sh' "$REPO_ROOT/.github/workflows/build-iso-hosted.yml" \
     || fail "hosted workflow does not verify ISO contents"
 ok "Calamares installer configuration is present"
