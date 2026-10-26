@@ -81,6 +81,11 @@ inside the squashfs:
 - the menu entry is named **Install Samurai Linux**
 - `grub-pc-bin`, `grub-efi-amd64-bin`, and `efibootmgr` are present for the
   installer's bootloader step
+- Calamares runtime tools are present: `unsquashfs` (from `squashfs-tools`),
+  `rsync`, and `cryptsetup`
+- the Samurai CLIs and Kuro/Shiro KDE color schemes are installed
+- the live boot menu auto-boots after 5 seconds and passes
+  `console=ttyS0,115200n8` to the kernel on both the isolinux and GRUB entries
 
 ## Boot test
 
@@ -92,7 +97,28 @@ bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso
 bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso --gui
 ```
 
-The headless run checks the serial log for kernel/systemd boot signs. For a visual check, use `--gui` and confirm that SDDM/KDE Plasma starts.
+The headless run checks the serial log for kernel/systemd boot signs. The hosted
+workflow raises the timeout to 300 seconds; the verified run reached
+`sddm.service` and a `samurai login:` prompt. The VGA screenshot is captured at
+120 seconds and may still show boot messages, so the serial log is authoritative.
+For a visual check, use `--gui` and confirm that SDDM/KDE Plasma starts.
+
+### Verified build
+
+The hosted run [40346119925](https://github.com/Mephisto-Von/Linux-OS/actions/runs/40346119925)
+built commit `028a2ac` and passed every stage:
+
+| Item | Value |
+|---|---|
+| ISO | `samurai-linux-2026.10.26-amd64.iso` |
+| Size | 2,547,646,464 bytes (2.37 GiB) |
+| SHA-256 | `811ae8b19f4f0296dc485014f5772c587a7e531f6269553e30b0bd4caf9b7555` |
+| Content verification | Passed |
+| QEMU boot test | Passed; serial log reached `sddm.service` and `samurai login:` |
+| Artifact | `samurai-linux-iso` (expires 2026-11-02) |
+
+The interactive Calamares installation itself is still not automated; see
+[`../samurai/docs/known-limitations.md`](../samurai/docs/known-limitations.md).
 
 ## What the ISO contains
 
@@ -103,8 +129,14 @@ The headless run checks the serial log for kernel/systemd boot signs. For a visu
 - Kuro applied for new users; the theme autostart entry restores the last selection
 - Calamares installer with Samurai branding, launched from the live desktop or
   the application menu as **Install Samurai Linux**
+- Calamares runtime tools (`squashfs-tools`/`unsquashfs`, `rsync`, `cryptsetup`)
+  and optional filesystem tools (`btrfs-progs`, `xfsprogs`, `f2fs-tools`,
+  `ntfs-3g`)
 - GRUB BIOS/UEFI installer packages (`grub-pc-bin`, `grub-efi-amd64-bin`,
-  `efibootmgr`, `dosfstools`, `mtools`) so Calamares can install a bootloader
+  `efibootmgr`, `dosfstools`, `mtools`) and `os-prober` so Calamares can install
+  a bootloader and detect existing systems
+- A 5-second boot-menu timeout so the live image boots unattended on headless
+  machines and servers; the kernel also logs to `ttyS0` for diagnostics
 - No Steam, Ollama, or first-boot setup wizard - install Steam/Ollama after
   boot; the installed system inherits the live rootfs
 

@@ -17,6 +17,13 @@ bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso --gui
 Or download the `samurai-linux-iso` artifact from the latest successful
 **Build ISO (hosted)** run in GitHub Actions. The workflow builds the ISO,
 verifies the live rootfs, and boots it headlessly in QEMU before uploading it.
+The verified build from 2026-10-26 is
+[run 40346119925](https://github.com/Mephisto-Von/Linux-OS/actions/runs/40346119925):
+
+- `samurai-linux-2026.10.26-amd64.iso`
+- 2,547,646,464 bytes (2.37 GiB)
+- SHA-256 `811ae8b19f4f0296dc485014f5772c587a7e531f6269553e30b0bd4caf9b7555`
+- GitHub Actions artifact `samurai-linux-iso` (expires 2026-11-02)
 
 Verify the download and write it to a USB drive:
 
@@ -35,7 +42,9 @@ bootloader if you need Secure Boot.
 
 ## Live Session
 
-1. Boot the USB drive and choose **Samurai Linux** in the boot menu.
+1. Boot the USB drive and choose **Live system (amd64)** in the boot menu (it
+   auto-selects after 5 seconds). The bootloader splash and text console still
+   use Debian's default branding; Calamares and the desktop use Samurai branding.
 2. The live session logs in as `samurai` (password `live` if asked). `sudo` is
    passwordless in the live session.
 3. Connect to the network from the Plasma system tray if you want to install
@@ -109,9 +118,12 @@ guidance.
 
 ## Current Limitations
 
-- The Calamares installer is integrated, but the full interactive installation
-  is not yet automated in CI. The hosted workflow verifies the live rootfs and
-  boots the ISO; a scripted QEMU install to a virtual disk is still future work.
+- The ISO builds, passes content verification, and boots to SDDM in CI (run
+  `40346119925`), but the full interactive installation is not yet automated. A
+  scripted QEMU install to a virtual disk is still future work, so partitioning,
+  bootloader installation, and first boot on real hardware remain unverified.
+- The bootloader splash and live text console still show Debian branding;
+  Calamares and the desktop use Samurai branding.
 - There is no Samurai first-boot wizard and no `samurai-install` command.
 - The installed system's bootloader is not Secure Boot signed.
 - There is no signed APT repository; the installed system uses Debian's

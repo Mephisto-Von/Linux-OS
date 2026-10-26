@@ -118,10 +118,25 @@ armored detached `.sig` when signing is enabled.
 | `samurai-gaming` CLI | ✅ Fixed for Debian (Steam via `steam-installer`) |
 | `live-build` ISO pipeline | ✅ Hosted workflow builds a bootable hybrid ISO |
 | CI (ShellCheck + smoke tests) | ✅ Passing on GitHub Actions |
-| Bootable ISO boot-tested | ⏳ QEMU boot test runs in the hosted workflow |
-| Calamares installer | 🟡 Integrated with Samurai branding; ISO build/install test pending |
+| Bootable ISO boot-tested | ✅ QEMU boot to SDDM verified in run `40346119925` |
+| Calamares installer | ✅ ISO builds, content verification passes, and the live ISO boots; interactive install not yet automated |
 | First-boot setup wizard | ❌ Not implemented |
 | Signed APT repository | ❌ Not implemented |
+
+### Verified ISO (2026-10-26)
+
+- CI run: [Build ISO (hosted) #40346119925](https://github.com/Mephisto-Von/Linux-OS/actions/runs/40346119925)
+- Commit: `028a2ac`
+- Artifact: `samurai-linux-iso` in GitHub Actions (expires 2026-11-02)
+- ISO: `samurai-linux-2026.10.26-amd64.iso`, 2,547,646,464 bytes (2.37 GiB)
+- SHA-256: `811ae8b19f4f0296dc485014f5772c587a7e531f6269553e30b0bd4caf9b7555`
+- Content verification: passed (BIOS/UEFI boot records, live kernel/initramfs/squashfs,
+  Calamares and Samurai branding, installer tooling, Samurai CLIs and themes,
+  auto-boot serial console)
+- QEMU boot test: passed (systemd reached `sddm.service`; `samurai login:` appeared
+  on the serial console)
+- Still unverified: a full click-through Calamares installation to disk; see
+  [`samurai/docs/known-limitations.md`](samurai/docs/known-limitations.md)
 
 `RELEASE_DESCRIPTION.md` is retained as a historical build log. Its commands are
 superseded by `build/README.md` and should not be used.

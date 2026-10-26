@@ -5,11 +5,14 @@
   the ISO on an ephemeral GitHub runner inside a privileged Debian trixie
   container. Local builds still require a Linux host with 50 GB+ free disk (100
   GB recommended), 4 GB+ RAM (8 GB recommended), and root for `chroot`.
-- **Installation is not yet end-to-end tested in CI** - Calamares, the Debian
-  live-install settings, Samurai branding, and BIOS/UEFI GRUB packages are in the
-  ISO, and the workflow verifies the live rootfs and boots the ISO in QEMU. A
-  scripted install to a virtual disk is future work, so the partitioner,
-  bootloader, and first-boot flow should be treated as unverified.
+- **Interactive installation is not yet end-to-end tested in CI** - the ISO
+  builds, passes content verification, and boots to SDDM in QEMU (run
+  `40346119925`). No automated test clicks through Calamares to install to a
+  virtual disk, so partitioning, bootloader installation, and first boot on real
+  hardware should be treated as unverified.
+- **Bootloader and console branding remains Debian** - the isolinux/GRUB splash
+  and the live `/etc/issue` use Debian's defaults. Calamares and the desktop use
+  Samurai branding.
 - **No first-boot wizard** - the installed system boots to SDDM; theme, AI, and
   gaming setup are manual commands after login.
 - **Installed system is not Secure Boot signed** - the live ISO uses Debian's

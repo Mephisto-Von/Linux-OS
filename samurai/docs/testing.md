@@ -32,8 +32,10 @@ and modifies the system.
 - `lb build` completes and the hybrid ISO appears under `dist/`
 - `bash build/verify-iso.sh dist/samurai-linux-*-amd64.iso` passes: BIOS and
   UEFI boot records exist, the live kernel/initramfs/squashfs are present, and
-  Calamares, Samurai branding, the installer entry, and GRUB packages are inside
-  the squashfs
+  Calamares, Samurai branding, the installer entry, GRUB packages, `unsquashfs`,
+  `rsync`, and `cryptsetup` are inside the squashfs; the Samurai CLIs and KDE
+  color schemes are installed; and the live menu auto-boots after 5 seconds with
+  `console=ttyS0,115200n8` on the isolinux and GRUB entries
 - Checksums and GPG signature verify:
   ```bash
   cd dist
@@ -49,9 +51,12 @@ bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso
 # Interactive desktop check
 bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso --gui
 ```
-Pass criteria: the serial log shows kernel/systemd boot messages, and the GUI run
-reaches the KDE Plasma live session as user `samurai` within 120s. The live
-desktop should show the **Install Samurai Linux** icon.
+Pass criteria: the serial log shows kernel/systemd boot messages. The hosted
+workflow uses `QEMU_TIMEOUT=300`; the verified 2026-10-26 run reached
+`sddm.service` and a `samurai login:` prompt. The VGA screenshot is captured at
+120 seconds and may still show boot messages, so the serial log is authoritative.
+For a GUI run, confirm that SDDM appears and the Plasma live session starts as
+`samurai` with the **Install Samurai Linux** icon.
 
 ### 4. Installation Tests (Calamares integrated; automated test not yet available)
 - Guided partitioning completes and the system reboots into the installed OS
@@ -103,6 +108,7 @@ CPU utilization: 2-5% at desktop
 ## Automating Tests
 - `tests/smoke.sh` runs in GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request
 - The `live-build` job validates `build/auto/config` in a `debian:trixie` container
-- The hosted ISO workflow (`.github/workflows/build-iso-hosted.yml`) builds the image in a privileged Debian container, runs `build/verify-iso.sh`, and then runs the headless QEMU boot test
+- The hosted ISO workflow (`.github/workflows/build-iso-hosted.yml`) builds the image in a privileged Debian container, runs `build/verify-iso.sh`, and then runs the headless QEMU boot test. Run `40346119925` on commit `028a2ac` passed both stages and reached SDDM.
 - Signed release builds and full install tests run on a self-hosted runner (`.github/workflows/build-iso.yml`)
+- A full Calamares install-to-disk test is still manual; no automated UI driver exists for Calamares 3.3.14
 - Defects found are logged and triaged; critical defects block release

@@ -90,7 +90,8 @@ bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso --gui
 
 Pass criteria for the headless run: the serial log contains kernel or systemd
 boot messages. Pass criteria for the GUI run: SDDM appears and the KDE Plasma
-live session starts as user `samurai`.
+live session starts as user `samurai`. The 2026-10-26 hosted build (run
+`40346119925`) reached `sddm.service` and a `samurai login:` prompt.
 
 ## 7. Verify the live session
 
