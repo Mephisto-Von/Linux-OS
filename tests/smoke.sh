@@ -19,19 +19,24 @@ assert_file() {
     [[ -f "$1" ]] || fail "expected file: $1"
 }
 
+# Shell files: every file in samurai/scripts, plus named shell files elsewhere.
+find_shell_files() {
+    find "$REPO_ROOT/samurai/scripts" -type f
+    find "$REPO_ROOT/scripts" "$REPO_ROOT/build" "$REPO_ROOT/tests" -type f \
+        \( -name '*.sh' -o -name 'config' -o -name '*.hook.chroot' \)
+}
+
 # 1. Syntax checks
 while IFS= read -r file; do
     bash -n "$file" || fail "syntax error: $file"
-done < <(find "$REPO_ROOT/samurai/scripts" "$REPO_ROOT/scripts" "$REPO_ROOT/build" \
-    -type f \( -name '*.sh' -o -name 'samurai-*' -o -name 'config' -o -name '*.hook.chroot' \) 2>/dev/null)
+done < <(find_shell_files)
 ok "all shell scripts parse"
 
 # 2. ShellCheck when available
 if command -v shellcheck >/dev/null 2>&1; then
     while IFS= read -r file; do
         shellcheck -x "$file" || fail "shellcheck: $file"
-    done < <(find "$REPO_ROOT/samurai/scripts" "$REPO_ROOT/scripts" "$REPO_ROOT/build" "$REPO_ROOT/tests" \
-        -type f \( -name '*.sh' -o -name 'samurai-*' -o -name 'config' -o -name '*.hook.chroot' \) 2>/dev/null)
+    done < <(find_shell_files)
     ok "shellcheck passed"
 else
     printf 'skip - shellcheck not installed\n'
