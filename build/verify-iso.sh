@@ -71,7 +71,7 @@ grep -q 'console=ttyS0,115200n8' "$TMP_DIR/grub.cfg" \
     || die "/boot/grub/grub.cfg does not pass console=ttyS0,115200n8"
 
 log "Extracting installer files from the live rootfs"
-unsquashfs -no-progress -d "$ROOT" "$SQUASHFS" \
+unsquashfs -f -no-progress -d "$ROOT" "$SQUASHFS" \
     etc/calamares/settings.conf \
     etc/calamares/branding/samurai/branding.desc \
     etc/calamares/branding/samurai/productLogo.png \
@@ -82,6 +82,11 @@ unsquashfs -no-progress -d "$ROOT" "$SQUASHFS" \
     usr/bin/calamares-install-debian \
     usr/bin/unsquashfs \
     usr/bin/rsync \
+    usr/local/bin/samurai-ai \
+    usr/local/bin/samurai-theme \
+    usr/local/bin/samurai-gaming \
+    usr/share/color-schemes/samurai-kuro.colors \
+    usr/share/color-schemes/samurai-shiro.colors \
     usr/share/applications/calamares-install-debian.desktop \
     usr/lib/grub/i386-pc/normal.mod \
     usr/lib/grub/x86_64-efi/normal.mod \
@@ -97,6 +102,11 @@ assert_file usr/bin/calamares
 assert_file usr/bin/calamares-install-debian
 assert_file usr/bin/unsquashfs
 assert_file usr/bin/rsync
+assert_file usr/local/bin/samurai-ai
+assert_file usr/local/bin/samurai-theme
+assert_file usr/local/bin/samurai-gaming
+assert_file usr/share/color-schemes/samurai-kuro.colors
+assert_file usr/share/color-schemes/samurai-shiro.colors
 assert_file usr/share/applications/calamares-install-debian.desktop
 assert_file usr/lib/grub/i386-pc/normal.mod
 assert_file usr/lib/grub/x86_64-efi/normal.mod

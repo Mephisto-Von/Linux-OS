@@ -48,6 +48,7 @@ btrfs-progs
 xfsprogs
 f2fs-tools
 ntfs-3g
+os-prober
 x11-xserver-utils
 
 # Live system (required for a bootable live image)
