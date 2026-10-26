@@ -15,5 +15,9 @@ for cfg in isolinux/live.cfg boot/grub/grub.cfg; do
     if grep -q 'console=ttyS0' "$cfg"; then
         continue
     fi
-    sed -i -E 's/^(append|linux)([[:space:]].*)$/\1\2 console=ttyS0,115200n8/' "$cfg"
+    # Bootloader commands are tab-indented, so allow leading whitespace.
+    sed -i -E \
+        -e 's/^([[:space:]]*append[[:space:]].*)$/\1 console=ttyS0,115200n8/' \
+        -e 's/^([[:space:]]*linux[[:space:]].*)$/\1 console=ttyS0,115200n8/' \
+        "$cfg"
 done
