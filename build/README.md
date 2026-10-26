@@ -101,7 +101,7 @@ The generated copies under `build/config/includes.chroot/usr/local/bin/` and `..
 ## CI
 
 - `.github/workflows/ci.yml` runs ShellCheck, Python syntax checks, and `tests/smoke.sh` in a `debian:trixie` container.
-- `.github/workflows/build-iso-hosted.yml` builds the ISO on an ephemeral GitHub-hosted runner inside a privileged Debian `trixie` container. Trigger it manually from the Actions tab.
+- `.github/workflows/build-iso-hosted.yml` builds the ISO on an ephemeral GitHub-hosted runner inside a privileged Debian `trixie` container, then boot-tests it in QEMU. Trigger it manually from the Actions tab; the ISO and checksum are uploaded as artifacts.
 - `.github/workflows/build-iso.yml` builds the ISO on a self-hosted runner labelled `samurai-builder`. The runner needs the tools above, 50+ GiB free disk, and `sudo`; use it for signed release builds.
 
 ## Troubleshooting

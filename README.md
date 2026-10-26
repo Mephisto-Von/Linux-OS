@@ -116,9 +116,9 @@ armored detached `.sig` when signing is enabled.
 | `samurai-ai` CLI | ✅ Implemented, smoke-tested |
 | `samurai-theme` CLI | ✅ Applies real KDE color schemes |
 | `samurai-gaming` CLI | ✅ Fixed for Debian (Steam via `steam-installer`) |
-| `live-build` ISO pipeline | ✅ Scaffolded; CI job validates config |
+| `live-build` ISO pipeline | ✅ Hosted workflow builds a 2.4 GB hybrid ISO |
 | CI (ShellCheck + smoke tests) | ✅ Passing on GitHub Actions |
-| Bootable ISO boot-tested | ⚠️ Hosted build in progress; no local Linux build host |
+| Bootable ISO boot-tested | ⏳ QEMU boot test added to hosted workflow; not yet run |
 | Calamares installer / first boot | ❌ Not implemented |
 | Signed APT repository | ❌ Not implemented |
 

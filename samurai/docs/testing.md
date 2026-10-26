@@ -97,5 +97,6 @@ CPU utilization: 2-5% at desktop
 ## Automating Tests
 - `tests/smoke.sh` runs in GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request
 - The `live-build` job validates `build/auto/config` in a `debian:trixie` container
-- Boot/install tests run manually or on a self-hosted runner (`.github/workflows/build-iso.yml`)
+- The hosted ISO workflow (`.github/workflows/build-iso-hosted.yml`) builds the image in a privileged Debian container and runs the headless QEMU boot test
+- Signed release builds and full install tests run on a self-hosted runner (`.github/workflows/build-iso.yml`)
 - Defects found are logged and triaged; critical defects block release
