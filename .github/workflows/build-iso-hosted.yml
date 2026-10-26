@@ -1,0 +1,68 @@
+name: Build ISO (hosted)
+
+# Build a real ISO on a standard GitHub-hosted runner. live-build needs root,
+# mounts, and chroot, so it runs inside a privileged Debian trixie container.
+# The self-hosted workflow remains available for signed release builds.
+on:
+  workflow_dispatch:
+    inputs:
+      min_disk_gb:
+        description: "Free disk required inside the builder (GiB)"
+        type: string
+        default: "25"
+
+permissions:
+  contents: read
+
+jobs:
+  iso:
+    name: Build live ISO (hosted)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost \
+            /usr/lib/jvm \
+            /usr/local/lib/node_modules
+          sudo apt-get clean
+          df -h /
+
+      - uses: actions/checkout@v5
+
+      - name: Build ISO in Debian trixie
+        env:
+          SAMURAI_MIN_DISK_GB: ${{ inputs.min_disk_gb }}
+        run: |
+          docker run --privileged --rm \
+            -e SAMURAI_MIN_DISK_GB \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work \
+            debian:trixie bash -lc '
+              set -euo pipefail
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                ca-certificates live-build debootstrap xorriso squashfs-tools gnupg
+              bash build/build.sh --check
+              bash build/build.sh
+              chown -R "$(stat -c %u:%g /work)" /work
+            '
+
+      - name: Show artifacts
+        run: ls -lh dist
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: samurai-linux-iso
+          path: |
+            dist/*.iso
+            dist/*.sha256
+            dist/*.sig
+          if-no-files-found: error
+          retention-days: 7

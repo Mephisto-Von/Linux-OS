@@ -117,8 +117,8 @@ armored detached `.sig` when signing is enabled.
 | `samurai-theme` CLI | ✅ Applies real KDE color schemes |
 | `samurai-gaming` CLI | ✅ Fixed for Debian (Steam via `steam-installer`) |
 | `live-build` ISO pipeline | ✅ Scaffolded; CI job validates config |
-| CI (ShellCheck + smoke tests) | ✅ Workflow included (not yet run on GitHub) |
-| Bootable ISO boot-tested | ⚠️ Not yet run in this repository |
+| CI (ShellCheck + smoke tests) | ✅ Passing on GitHub Actions |
+| Bootable ISO boot-tested | ⚠️ Hosted build in progress; no local Linux build host |
 | Calamares installer / first boot | ❌ Not implemented |
 | Signed APT repository | ❌ Not implemented |
 
