@@ -116,10 +116,11 @@ armored detached `.sig` when signing is enabled.
 | `samurai-ai` CLI | ✅ Implemented, smoke-tested |
 | `samurai-theme` CLI | ✅ Applies real KDE color schemes |
 | `samurai-gaming` CLI | ✅ Fixed for Debian (Steam via `steam-installer`) |
-| `live-build` ISO pipeline | ✅ Hosted workflow builds a 2.4 GB hybrid ISO |
+| `live-build` ISO pipeline | ✅ Hosted workflow builds a bootable hybrid ISO |
 | CI (ShellCheck + smoke tests) | ✅ Passing on GitHub Actions |
-| Bootable ISO boot-tested | ⏳ QEMU boot test added to hosted workflow; not yet run |
-| Calamares installer / first boot | ❌ Not implemented |
+| Bootable ISO boot-tested | ⏳ QEMU boot test runs in the hosted workflow |
+| Calamares installer | 🟡 Integrated with Samurai branding; ISO build/install test pending |
+| First-boot setup wizard | ❌ Not implemented |
 | Signed APT repository | ❌ Not implemented |
 
 `RELEASE_DESCRIPTION.md` is retained as a historical build log. Its commands are

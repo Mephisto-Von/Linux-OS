@@ -30,6 +30,10 @@ and modifies the system.
 ### 2. Build Pipeline Tests
 - `bash build/build.sh --check` passes (host, tools, disk, config generation)
 - `lb build` completes and the hybrid ISO appears under `dist/`
+- `bash build/verify-iso.sh dist/samurai-linux-*-amd64.iso` passes: BIOS and
+  UEFI boot records exist, the live kernel/initramfs/squashfs are present, and
+  Calamares, Samurai branding, the installer entry, and GRUB packages are inside
+  the squashfs
 - Checksums and GPG signature verify:
   ```bash
   cd dist
@@ -46,14 +50,16 @@ bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso
 bash build/qemu-test.sh dist/samurai-linux-*-amd64.iso --gui
 ```
 Pass criteria: the serial log shows kernel/systemd boot messages, and the GUI run
-reaches the KDE Plasma live session as user `samurai` within 120s. The current
-ISO has no installer.
+reaches the KDE Plasma live session as user `samurai` within 120s. The live
+desktop should show the **Install Samurai Linux** icon.
 
-### 4. Installation Tests (target design; not yet available)
-- Guided partitioning completes and system reboots into installed OS
-- LUKS-encrypted install unlocks with passphrase and boots
-- Each profile (minimal, developer, gaming, AI/dev, full) installs cleanly
-- First-boot wizard completes all 10 steps
+### 4. Installation Tests (Calamares integrated; automated test not yet available)
+- Guided partitioning completes and the system reboots into the installed OS
+- LUKS-encrypted install unlocks with the passphrase and boots
+- UEFI install creates an EFI system partition and a working GRUB entry
+- BIOS install writes GRUB to the disk and boots
+- The installed system reaches SDDM and accepts the account created in Calamares
+- First-boot setup is manual; there is no Samurai first-boot wizard
 
 ### 5. Desktop and Theme Tests
 - Kuro applies: background `#111214`, crimson `#B52832`, gold `#B89A59`
@@ -88,7 +94,7 @@ CPU utilization: 2-5% at desktop
 | Component | Minimum coverage |
 |---|---|
 | ISO boot | QEMU, 1 VM per architecture |
-| Installation | Guided + LUKS + one manual partition |
+| Installation | Calamares guided + LUKS + one manual partition (manual verification; automated VM test pending) |
 | Themes | Kuro, Shiro, auto-switch |
 | AI | One local model, local-only mode |
 | Gaming | Steam + Proton + GameMode + MangoHUD |
@@ -97,6 +103,6 @@ CPU utilization: 2-5% at desktop
 ## Automating Tests
 - `tests/smoke.sh` runs in GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request
 - The `live-build` job validates `build/auto/config` in a `debian:trixie` container
-- The hosted ISO workflow (`.github/workflows/build-iso-hosted.yml`) builds the image in a privileged Debian container and runs the headless QEMU boot test
+- The hosted ISO workflow (`.github/workflows/build-iso-hosted.yml`) builds the image in a privileged Debian container, runs `build/verify-iso.sh`, and then runs the headless QEMU boot test
 - Signed release builds and full install tests run on a self-hosted runner (`.github/workflows/build-iso.yml`)
 - Defects found are logged and triaged; critical defects block release

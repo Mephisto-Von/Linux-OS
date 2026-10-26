@@ -1,16 +1,21 @@
 # Samurai Linux - Known Limitations
 
 ## Build and Release
-- **ISO pipeline is scaffolded but not boot-tested in this repository** - the
-  `live-build` configuration and `build/build.sh` are in place; a full build
-  requires a Linux host with 50 GB+ free disk.
-- **Build host requirements**: 50 GB+ free disk (100 GB recommended), 4 GB+ RAM
-  (8 GB recommended). The originating environment had ~2.3 GB free disk and
-  ~174 MB free RAM, which blocked the build.
-- **No installer** - the ISO boots a live KDE Plasma session; Calamares and the
-  first-boot wizard are not implemented.
-- **No Secure Boot signature** - builds are unsigned; users must sign the
-  bootloader themselves or disable Secure Boot.
+- **Hosted ISO build works** - `.github/workflows/build-iso-hosted.yml` builds
+  the ISO on an ephemeral GitHub runner inside a privileged Debian trixie
+  container. Local builds still require a Linux host with 50 GB+ free disk (100
+  GB recommended), 4 GB+ RAM (8 GB recommended), and root for `chroot`.
+- **Installation is not yet end-to-end tested in CI** - Calamares, the Debian
+  live-install settings, Samurai branding, and BIOS/UEFI GRUB packages are in the
+  ISO, and the workflow verifies the live rootfs and boots the ISO in QEMU. A
+  scripted install to a virtual disk is future work, so the partitioner,
+  bootloader, and first-boot flow should be treated as unverified.
+- **No first-boot wizard** - the installed system boots to SDDM; theme, AI, and
+  gaming setup are manual commands after login.
+- **Installed system is not Secure Boot signed** - the live ISO uses Debian's
+  signed UEFI shim, but Calamares installs unsigned GRUB by default. Disable
+  Secure Boot after installation or sign the bootloader with your own keys.
+- **Artifact retention** - hosted ISO artifacts expire after 7 days.
 
 ## AI Runtime
 - **Model size limited by RAM** - larger models (12B+) need 16 GB+ system RAM

@@ -111,6 +111,27 @@ PY
     ok "KDE color schemes parse"
 fi
 
+# 5c. Calamares branding and package wiring are present
+branding="$REPO_ROOT/build/config/includes.chroot/etc/calamares/branding/samurai"
+assert_file "$branding/branding.desc"
+for asset in productLogo.png productIcon.png productWelcome.png slide1.png show.qml; do
+    assert_file "$branding/$asset"
+done
+grep -q '^componentName:.*samurai$' "$branding/branding.desc" || fail "Calamares component name is missing"
+grep -q '^calamares$' "$REPO_ROOT/build/config/package-lists/samurai.list.chroot" || fail "calamares is not installed"
+grep -q '^calamares-settings-debian$' "$REPO_ROOT/build/config/package-lists/samurai.list.chroot" \
+    || fail "calamares-settings-debian is not installed"
+for pkg in grub-pc-bin grub-efi-amd64-bin efibootmgr; do
+    grep -q "^$pkg$" "$REPO_ROOT/build/config/package-lists/samurai.list.chroot" \
+        || fail "$pkg is not installed for the installer"
+done
+grep -q 'branding: samurai' "$REPO_ROOT/build/config/hooks/normal/0100-samurai.hook.chroot" \
+    || fail "Calamares branding is not selected"
+assert_file "$REPO_ROOT/build/verify-iso.sh"
+grep -q 'bash build/verify-iso.sh' "$REPO_ROOT/.github/workflows/build-iso-hosted.yml" \
+    || fail "hosted workflow does not verify ISO contents"
+ok "Calamares installer configuration is present"
+
 # 6. Gaming launcher strips the subcommand before passing arguments
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/steam" <<'EOF'

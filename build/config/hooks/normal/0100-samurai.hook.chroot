@@ -15,3 +15,21 @@ for scheme in /usr/share/samurai/themes/*/*.colors; do
     [ -f "$scheme" ] || continue
     install -m 0644 "$scheme" "/usr/share/color-schemes/$(basename "$scheme")"
 done
+
+# Point Calamares at the Samurai branding and menu entry.
+settings=/etc/calamares/settings.conf
+desktop=/usr/share/applications/calamares-install-debian.desktop
+if [ ! -f "$settings" ] || [ ! -f "$desktop" ]; then
+    echo "Calamares install is incomplete (settings.conf or desktop entry missing)" >&2
+    exit 1
+fi
+
+sed -i 's/^branding:.*/branding: samurai/' "$settings"
+sed -i \
+    -e 's/^Name=.*/Name=Install Samurai Linux/' \
+    -e 's/^GenericName=.*/GenericName=Samurai Linux Installer/' \
+    -e 's/^Comment=.*/Comment=Install Samurai Linux on this computer/' \
+    -e 's/^Icon=.*/Icon=samurai-install/' \
+    "$desktop"
+install -Dm0644 /etc/calamares/branding/samurai/productIcon.png \
+    /usr/share/icons/hicolor/128x128/apps/samurai-install.png

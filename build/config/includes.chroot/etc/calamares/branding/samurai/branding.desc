@@ -1,0 +1,38 @@
+---
+componentName:   samurai
+welcomeStyleCalamares: true
+welcomeExpandingLogo: true
+windowExpanding: normal
+windowSize: 900px,620px
+windowPlacement: center
+
+strings:
+    productName:         Samurai Linux
+    shortProductName:    Samurai
+    version:             2026.10
+    shortVersion:        2026.10
+    versionedName:       Samurai Linux 2026.10
+    shortVersionedName:  Samurai 2026.10
+    bootloaderEntryName: Samurai Linux
+    productUrl:          https://github.com/Mephisto-Von/Linux-OS
+    supportUrl:          https://github.com/Mephisto-Von/Linux-OS/issues
+    knownIssuesUrl:      https://github.com/Mephisto-Von/Linux-OS/issues
+    releaseNotesUrl:     https://github.com/Mephisto-Von/Linux-OS
+
+sidebar: widget
+navigation: widget
+
+images:
+    productLogo:         "productLogo.png"
+    productIcon:         "productIcon.png"
+    productWelcome:      "productWelcome.png"
+
+slideshow:               "show.qml"
+
+style:
+    SidebarBackground:          "#111214"
+    SidebarText:                "#F2EEE5"
+    SidebarTextCurrent:         "#FFFFFF"
+    SidebarBackgroundCurrent:   "#B52832"
+
+slideshowAPI: 2

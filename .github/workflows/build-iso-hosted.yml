@@ -56,10 +56,17 @@ jobs:
       - name: Show artifacts
         run: ls -lh dist
 
-      - name: Install QEMU
+      - name: Install ISO test tools
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends qemu-system-x86
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            qemu-system-x86 xorriso squashfs-tools
+
+      - name: Verify ISO contents
+        run: |
+          iso=$(find dist -maxdepth 1 -name '*.iso' -print -quit)
+          test -n "$iso"
+          bash build/verify-iso.sh "$iso"
 
       - name: Boot-test ISO in QEMU
         env:

@@ -31,6 +31,18 @@ fonts-noto-cjk
 fonts-noto-color-emoji
 fonts-dejavu
 
+# Installer (Calamares running from the live session)
+calamares
+calamares-settings-debian
+grub-common
+grub2-common
+grub-pc-bin
+grub-efi-amd64-bin
+efibootmgr
+dosfstools
+mtools
+x11-xserver-utils
+
 # Live system (required for a bootable live image)
 live-boot
 live-config

@@ -64,6 +64,24 @@ gpg --verify dist/*.iso.sig dist/*.iso
 (cd dist && sha256sum -c ./*.iso.sha256)
 ```
 
+## Verify the ISO
+
+After a build, verify the live rootfs and installer wiring before booting:
+
+```bash
+bash build/verify-iso.sh dist/samurai-linux-*-amd64.iso
+```
+
+The script checks the BIOS/UEFI boot records, extracts `/live/vmlinuz`,
+`/live/initrd.img`, and `/live/filesystem.squashfs` from the ISO, then verifies
+inside the squashfs:
+
+- Calamares and `calamares-settings-debian` are installed
+- `branding: samurai` is selected and the Samurai branding assets exist
+- the menu entry is named **Install Samurai Linux**
+- `grub-pc-bin`, `grub-efi-amd64-bin`, and `efibootmgr` are present for the
+  installer's bootloader step
+
 ## Boot test
 
 ```bash
@@ -83,7 +101,12 @@ The headless run checks the serial log for kernel/systemd boot signs. For a visu
 - `samurai-ai`, `samurai-theme`, and `samurai-gaming` in `/usr/local/bin`
 - Kuro and Shiro KDE color schemes in `/usr/share/color-schemes`
 - Kuro applied for new users; the theme autostart entry restores the last selection
-- No Steam, Ollama, or installer — install Steam/Ollama after boot; the image is live-only
+- Calamares installer with Samurai branding, launched from the live desktop or
+  the application menu as **Install Samurai Linux**
+- GRUB BIOS/UEFI installer packages (`grub-pc-bin`, `grub-efi-amd64-bin`,
+  `efibootmgr`, `dosfstools`, `mtools`) so Calamares can install a bootloader
+- No Steam, Ollama, or first-boot setup wizard - install Steam/Ollama after
+  boot; the installed system inherits the live rootfs
 
 ## Customisation
 
@@ -101,7 +124,7 @@ The generated copies under `build/config/includes.chroot/usr/local/bin/` and `..
 ## CI
 
 - `.github/workflows/ci.yml` runs ShellCheck, Python syntax checks, and `tests/smoke.sh` in a `debian:trixie` container.
-- `.github/workflows/build-iso-hosted.yml` builds the ISO on an ephemeral GitHub-hosted runner inside a privileged Debian `trixie` container, then boot-tests it in QEMU. Trigger it manually from the Actions tab; the ISO and checksum are uploaded as artifacts.
+- `.github/workflows/build-iso-hosted.yml` builds the ISO on an ephemeral GitHub-hosted runner inside a privileged Debian `trixie` container, verifies the ISO contents, then boot-tests it in QEMU. Trigger it manually from the Actions tab; the ISO and checksum are uploaded as artifacts.
 - `.github/workflows/build-iso.yml` builds the ISO on a self-hosted runner labelled `samurai-builder`. The runner needs the tools above, 50+ GiB free disk, and `sudo`; use it for signed release builds.
 
 ## Troubleshooting
