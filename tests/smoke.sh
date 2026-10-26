@@ -121,7 +121,7 @@ grep -q '^componentName:.*samurai$' "$branding/branding.desc" || fail "Calamares
 grep -q '^calamares$' "$REPO_ROOT/build/config/package-lists/samurai.list.chroot" || fail "calamares is not installed"
 grep -q '^calamares-settings-debian$' "$REPO_ROOT/build/config/package-lists/samurai.list.chroot" \
     || fail "calamares-settings-debian is not installed"
-for pkg in grub-pc-bin grub-efi-amd64-bin efibootmgr; do
+for pkg in grub-pc-bin grub-efi-amd64-bin efibootmgr squashfs-tools; do
     grep -q "^$pkg$" "$REPO_ROOT/build/config/package-lists/samurai.list.chroot" \
         || fail "$pkg is not installed for the installer"
 done

@@ -41,6 +41,13 @@ grub-efi-amd64-bin
 efibootmgr
 dosfstools
 mtools
+# unpackfs shells out to unsquashfs; do not rely on a recommends here.
+squashfs-tools
+# Filesystem tools for the optional manual-partitioning choices.
+btrfs-progs
+xfsprogs
+f2fs-tools
+ntfs-3g
 x11-xserver-utils
 
 # Live system (required for a bootable live image)

@@ -54,10 +54,21 @@ log "Extracting live kernel, initramfs, and squashfs"
 xorriso -osirrox on -indev "$ISO" \
     -extract /live/vmlinuz "$TMP_DIR/vmlinuz" \
     -extract /live/initrd.img "$TMP_DIR/initrd.img" \
-    -extract /live/filesystem.squashfs "$SQUASHFS" >/dev/null
+    -extract /live/filesystem.squashfs "$SQUASHFS" \
+    -extract /isolinux/isolinux.cfg "$TMP_DIR/isolinux.cfg" \
+    -extract /isolinux/live.cfg "$TMP_DIR/live.cfg" \
+    -extract /boot/grub/grub.cfg "$TMP_DIR/grub.cfg" >/dev/null
 [[ -s "$TMP_DIR/vmlinuz" ]] || die "ISO is missing /live/vmlinuz"
 [[ -s "$TMP_DIR/initrd.img" ]] || die "ISO is missing /live/initrd.img"
 [[ -s "$SQUASHFS" ]] || die "ISO is missing /live/filesystem.squashfs"
+
+log "Checking the live boot menu auto-boots with a serial console"
+grep -Eq '^timeout[[:space:]]+50$' "$TMP_DIR/isolinux.cfg" \
+    || die "/isolinux/isolinux.cfg does not auto-boot (timeout is not 5s)"
+grep -q 'console=ttyS0,115200n8' "$TMP_DIR/live.cfg" \
+    || die "/isolinux/live.cfg does not pass console=ttyS0,115200n8"
+grep -q 'console=ttyS0,115200n8' "$TMP_DIR/grub.cfg" \
+    || die "/boot/grub/grub.cfg does not pass console=ttyS0,115200n8"
 
 log "Extracting installer files from the live rootfs"
 unsquashfs -no-progress -d "$ROOT" "$SQUASHFS" \
@@ -69,6 +80,8 @@ unsquashfs -no-progress -d "$ROOT" "$SQUASHFS" \
     etc/calamares/branding/samurai/show.qml \
     usr/bin/calamares \
     usr/bin/calamares-install-debian \
+    usr/bin/unsquashfs \
+    usr/bin/rsync \
     usr/share/applications/calamares-install-debian.desktop \
     usr/lib/grub/i386-pc/normal.mod \
     usr/lib/grub/x86_64-efi/normal.mod \
@@ -82,6 +95,8 @@ assert_file etc/calamares/branding/samurai/productWelcome.png
 assert_file etc/calamares/branding/samurai/show.qml
 assert_file usr/bin/calamares
 assert_file usr/bin/calamares-install-debian
+assert_file usr/bin/unsquashfs
+assert_file usr/bin/rsync
 assert_file usr/share/applications/calamares-install-debian.desktop
 assert_file usr/lib/grub/i386-pc/normal.mod
 assert_file usr/lib/grub/x86_64-efi/normal.mod
@@ -102,5 +117,8 @@ assert_contains var/lib/dpkg/status '^Package: calamares-settings-debian$'
 assert_contains var/lib/dpkg/status '^Package: grub-pc-bin$'
 assert_contains var/lib/dpkg/status '^Package: grub-efi-amd64-bin$'
 assert_contains var/lib/dpkg/status '^Package: efibootmgr$'
+assert_contains var/lib/dpkg/status '^Package: squashfs-tools$'
+assert_contains var/lib/dpkg/status '^Package: rsync$'
+assert_contains var/lib/dpkg/status '^Package: cryptsetup$'
 
 log "ISO verification passed"
