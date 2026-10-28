@@ -603,17 +603,11 @@ class InstallerTest:
         timeout: float,
         screenshot: str,
     ) -> None:
+        # One click only. A retry can land on the next page while OCR is still
+        # processing the previous screenshot and skip a whole step.
         if not self.click_word("next"):
             self.vnc.key("alt-n")
-        try:
-            # The first click on an unfocused window can be consumed by the
-            # focus policy. Retry once before failing the page transition.
-            self.wait_for(needle, label, 15, screenshot)
-        except Failure:
-            self.log(f"{label} did not appear; clicking Next again")
-            if not self.click_word("next"):
-                self.vnc.key("alt-n")
-            self.wait_for(needle, label, timeout, screenshot)
+        self.wait_for(needle, label, timeout, screenshot)
 
     # -- install flow --------------------------------------------------
 
@@ -714,7 +708,12 @@ class InstallerTest:
             90,
             "03-keyboard",
         )
-        self.advance("erase disk", "Calamares partition page", 120, "04-partition")
+        self.advance(
+            ("erase disk", "manual partitioning"),
+            "Calamares partition page",
+            120,
+            "04-partition",
+        )
         self.advance(
             ("what is your name", "login name", "computer name"),
             "Calamares users page",
