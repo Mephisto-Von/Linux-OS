@@ -54,6 +54,14 @@ if [ -f /etc/calamares/branding/samurai/productIcon.png ]; then
         /usr/share/pixmaps/samurai-linux.png
 fi
 
+# Calamares' calamares-bootloader-config helper ends with update-grub, which
+# writes /boot/grub/grub.cfg. The live image never installs grub to a disk, so
+# /boot/grub does not exist yet; without it update-grub exits non-zero and the
+# installer reports "External command finished with errors" - offline installs
+# have no apt index to install grub-pc from, so the directory must ship in the
+# image. An empty /boot/grub is harmless: grub-install recreates it on install.
+install -d -m 0755 /boot/grub
+
 # Brand the installed system's GRUB and keep a serial console available for
 # headless installs and automated tests.
 #

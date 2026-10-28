@@ -762,13 +762,28 @@ class InstallerTest:
             try:
                 assert self.serial
                 tail = self.serial.command(
-                    "tail -n 3 /root/.cache/calamares/session.log 2>/dev/null || true",
+                    "tail -n 40 /root/.cache/calamares/session.log 2>/dev/null || true",
                     timeout=30,
                     check=False,
                 )
                 if tail:
                     self.log("calamares: " + " | ".join(tail.splitlines()[-3:]))
+                # Calamares writes the failure to its session log long before
+                # any dialog is legible; grep the log so a failed job is
+                # reported immediately instead of at the end of the timeout.
+                if re.search(
+                    r"Installation failed|External command finished with errors",
+                    tail,
+                    re.I,
+                ):
+                    self.vnc.capture("08-failure.png")
+                    raise Failure(
+                        "Calamares reported an installation failure; session log tail:\n"
+                        + "\n".join(tail.splitlines()[-40:])
+                    )
             except Failure as exc:
+                if "Calamares reported an installation failure" in str(exc):
+                    raise
                 self.log(f"could not poll the Calamares log: {exc}")
         self.vnc.capture("08-timeout.png")
         raise Failure("timed out waiting for Calamares to finish")
