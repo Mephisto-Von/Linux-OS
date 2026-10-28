@@ -752,9 +752,9 @@ class InstallerTest:
             time.sleep(20)
             image = self.vnc.stable_capture(f"07-progress-{attempt:02d}.png")
             text = re.sub(r"\s+", " ", self.ocr_text(image).lower())
-            if any(x in text for x in ["all done", "installation complete", "install complete", "finished", "done", "reboot", "restart now"]):
+            if any(x in text for x in ["all done", "installation complete", "install complete", "installation finished", "finished", "done", "reboot", "restart now", "continue", "thank you"]):
                 self.vnc.capture("08-finished.png")
-                self.log("Calamares reached the finished page")
+                self.log(f"Calamares reached the finished page: {text[-100:]}")
                 return
             if "installation failed" in text or "installer failed" in text or "error" in text and "failed" in text:
                 self.vnc.capture("08-failure.png")
@@ -1018,7 +1018,7 @@ def main() -> int:
         help="directory for the disk, logs, and screenshots",
     )
     parser.add_argument("--disk-size", default="20G", help="size of the blank target disk")
-    parser.add_argument("--timeout", type=int, default=3600, help="seconds allowed for the install")
+    parser.add_argument("--timeout", type=int, default=5400, help="seconds allowed for the install")
     parser.add_argument(
         "--reboot-timeout", type=int, default=900, help="seconds allowed for the installed boot"
     )

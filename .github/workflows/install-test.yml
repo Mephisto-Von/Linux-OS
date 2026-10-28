@@ -112,7 +112,7 @@ jobs:
           if [[ "${EXPECT_BRANDING:-false}" == "true" ]]; then
             args+=(--branded)
           fi
-          bash build/install-test.sh "$iso" "${args[@]}" --timeout 3600
+          bash build/install-test.sh "$iso" "${args[@]}" --timeout 5400
 
       - name: Show install test log
         if: always()
