@@ -524,13 +524,40 @@ class InstallerTest:
     def ocr_text(self, image: Path) -> str:
         return self.ocr.text(image)
 
-    def wait_for(self, needle: str, label: str, timeout: float, screenshot: str) -> Path:
+    def dismiss_welcome(self) -> None:
+        """Close Plasma's first-run Welcome Center if it is running.
+
+        It opens on top of Calamares and takes the keyboard focus, so leaving
+        it up makes both OCR and clicks unreliable.
+        """
+        if not self.serial:
+            return
+        self.serial.command(
+            "pkill -x plasma-welcome >/dev/null 2>&1 || true; "
+            "pkill -f '/usr/bin/plasma-welcome' >/dev/null 2>&1 || true; "
+            "pkill -x kde-welcome >/dev/null 2>&1 || true; "
+            "true",
+            timeout=30,
+            check=False,
+        )
+
+    def wait_for(
+        self,
+        needle: str,
+        label: str,
+        timeout: float,
+        screenshot: str,
+        *,
+        dismiss_welcome: bool = False,
+    ) -> Path:
         needle_l = needle.lower()
         deadline = time.time() + timeout
         last_text = ""
         attempt = 0
         while time.time() < deadline:
             attempt += 1
+            if dismiss_welcome:
+                self.dismiss_welcome()
             image = self.vnc.stable_capture(f"{screenshot}-{attempt:02d}.png")
             text = self.ocr_text(image)
             last_text = text
@@ -630,11 +657,13 @@ class InstallerTest:
             timeout=30,
             check=False,
         )
+        self.dismiss_welcome()
         self.serial.background(
             "DISPLAY=:0 XAUTHORITY=/root/.Xauthority QT_AUTO_SCREEN_SCALE_FACTOR=1 "
             "calamares -d >/tmp/calamares.out 2>&1"
         )
         time.sleep(10)
+        self.dismiss_welcome()
         tail = self.serial.command("tail -n 30 /tmp/calamares.out 2>/dev/null || true", timeout=30)
         running = self.serial.command("pgrep -x calamares >/dev/null && echo yes || echo no", timeout=30)
         if running.strip() != "yes":
@@ -643,7 +672,13 @@ class InstallerTest:
             raise Failure(f"Calamares could not connect to the live display:\n{tail}")
 
     def drive_installer(self) -> None:
-        self.wait_for("welcome", "Calamares welcome page", 240, "01-welcome")
+        self.wait_for(
+            "calamares installer",
+            "Calamares welcome page",
+            240,
+            "01-welcome",
+            dismiss_welcome=True,
+        )
         self.advance("region:", "Calamares locale page", 90, "02-locale")
         self.advance("layout", "Calamares keyboard page", 90, "03-keyboard")
         self.advance("erase disk", "Calamares partition page", 120, "04-partition")
