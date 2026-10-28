@@ -23,7 +23,7 @@ assert_file() {
 find_shell_files() {
     find "$REPO_ROOT/samurai/scripts" -type f
     find "$REPO_ROOT/scripts" "$REPO_ROOT/build" "$REPO_ROOT/tests" -type f \
-        \( -name '*.sh' -o -name 'config' -o -name '*.hook.chroot' \)
+        \( -name '*.sh' -o -name 'config' -o -name '*.hook.chroot' -o -name '*.hook.binary' \)
 }
 
 # 1. Syntax checks
@@ -42,11 +42,18 @@ else
     printf 'skip - shellcheck not installed\n'
 fi
 
-# 3. Python syntax
+# 3. Python syntax and the install harness's serial-console self-test
 if command -v python3 >/dev/null 2>&1; then
-    python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' \
-        "$REPO_ROOT/scripts/use-heretic.py"
-    ok "python script parses"
+    python3 - "$REPO_ROOT/scripts/use-heretic.py" "$REPO_ROOT/build/install-test.py" <<'PY'
+import ast
+import pathlib
+import sys
+
+for path in sys.argv[1:]:
+    ast.parse(pathlib.Path(path).read_text())
+PY
+    python3 "$REPO_ROOT/build/install-test.py" --self-test >/dev/null
+    ok "python scripts parse and the install harness self-test passes"
 fi
 
 # 4. AI CLI usage, default model, and file credentials
@@ -129,6 +136,31 @@ grep -q 'branding: samurai' "$REPO_ROOT/build/config/hooks/normal/0100-samurai.h
     || fail "Calamares branding is not selected"
 assert_file "$REPO_ROOT/build/verify-iso.sh"
 assert_file "$REPO_ROOT/build/config/hooks/normal/0100-serial.hook.binary"
+assert_file "$REPO_ROOT/build/config/hooks/normal/0110-branding.hook.chroot"
+assert_file "$REPO_ROOT/build/config/hooks/normal/0200-branding.hook.binary"
+for splash in \
+    "$REPO_ROOT/build/config/bootloaders/isolinux/splash.png" \
+    "$REPO_ROOT/build/config/bootloaders/grub-pc/splash.png" \
+    "$REPO_ROOT/build/config/includes.chroot/usr/share/samurai/boot/grub-splash.png"; do
+    assert_file "$splash"
+done
+grep -q 'Samurai Linux 2026' "$REPO_ROOT/build/config/hooks/normal/0200-branding.hook.binary" \
+    || fail "the binary branding hook does not rename the boot menu"
+grep -q 'GRUB_BACKGROUND' "$REPO_ROOT/build/config/hooks/normal/0110-branding.hook.chroot" \
+    || fail "the chroot branding hook does not set the GRUB background"
+grep -q 'os-release' "$REPO_ROOT/build/verify-iso.sh" \
+    || fail "ISO verification does not check distribution branding"
+assert_file "$REPO_ROOT/build/install-test.py"
+assert_file "$REPO_ROOT/build/install-test.sh"
+grep -q 'uses: ./.github/workflows/install-test.yml' "$REPO_ROOT/.github/workflows/build-iso-hosted.yml" \
+    || fail "the hosted ISO build does not run the install test"
+if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    for hook in 0110-branding.hook.chroot 0200-branding.hook.binary; do
+        if git -C "$REPO_ROOT" check-ignore -q "build/config/hooks/normal/$hook"; then
+            fail "build/config/hooks/normal/$hook is ignored by git"
+        fi
+    done
+fi
 grep -Fq 'timeout[[:space:]]+0$/timeout 50/' "$REPO_ROOT/build/config/hooks/normal/0100-serial.hook.binary" \
     || fail "the live ISO boot menu does not auto-boot"
 grep -q 'bash build/verify-iso.sh' "$REPO_ROOT/.github/workflows/build-iso-hosted.yml" \

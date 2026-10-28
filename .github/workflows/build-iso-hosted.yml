@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   iso:
@@ -117,3 +118,14 @@ jobs:
             dist/*.sig
           if-no-files-found: error
           retention-days: 7
+
+  install-test:
+    name: Install ISO in QEMU
+    needs: iso
+    uses: ./.github/workflows/install-test.yml
+    with:
+      run_id: ${{ github.run_id }}
+      branded: true
+    permissions:
+      contents: read
+      actions: read

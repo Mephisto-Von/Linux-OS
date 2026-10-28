@@ -1,0 +1,952 @@
+#!/usr/bin/env python3
+"""Install a Samurai Linux ISO into a blank QEMU disk and boot the result.
+
+The live image has no Calamares batch mode, so this driver:
+  1. boots the ISO with a blank disk and a serial console,
+  2. logs in on ttyS0, becomes root, and starts Calamares on the live desktop,
+  3. drives Calamares through VNC with a small amount of OCR-based state
+     detection, and
+  4. boots from the installed disk and verifies it over the serial console.
+
+It is intentionally boring: every UI action is logged, every screenshot is
+kept as a CI artifact, and a failure leaves enough evidence to debug it.
+
+Run ``python3 build/install-test.py --self-test`` to exercise the serial
+console logic without QEMU.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import os
+import re
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
+LOG_BEGIN = "__SAMURAI_LOG_BEGIN__"
+LOG_END = "__SAMURAI_LOG_END__"
+
+
+class Failure(RuntimeError):
+    pass
+
+
+class Log:
+    def __init__(self, path: Path):
+        self.path = path
+        self._fh = path.open("w", encoding="utf-8", errors="replace")
+
+    def __call__(self, message: str) -> None:
+        line = f"[{time.strftime('%H:%M:%S')}] {message}"
+        print(line, flush=True)
+        self._fh.write(line + "\n")
+        self._fh.flush()
+
+    def close(self) -> None:
+        self._fh.close()
+
+
+def run(cmd: list[str], *, timeout: int = 60, check: bool = True) -> subprocess.CompletedProcess:
+    result = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=timeout,
+    )
+    if check and result.returncode != 0:
+        raise Failure(f"command failed ({result.returncode}): {' '.join(cmd)}\n{result.stdout}")
+    return result
+
+
+class SerialConsole:
+    """A bidirectional connection to QEMU's unix serial chardev."""
+
+    def __init__(
+        self,
+        transcript: Path,
+        log: Log,
+        *,
+        path: Path | None = None,
+        sock: socket.socket | None = None,
+    ):
+        self.path = path
+        self.log = log
+        self.buffer = ""
+        self.counter = 0
+        self.eof = False
+        self._fh = transcript.open("w", encoding="utf-8", errors="replace")
+        if sock is None:
+            if path is None:
+                raise ValueError("SerialConsole needs a path or a connected socket")
+            sock = self._connect(path)
+        self.sock = sock
+        self.sock.setblocking(False)
+
+    @staticmethod
+    def _connect(path: Path) -> socket.socket:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        deadline = time.time() + 30
+        while True:
+            try:
+                sock.connect(str(path))
+                return sock
+            except OSError:
+                if time.time() > deadline:
+                    sock.close()
+                    raise
+                time.sleep(0.5)
+
+    def close(self) -> None:
+        try:
+            self.sock.close()
+        finally:
+            self._fh.close()
+
+    def _read(self) -> None:
+        while True:
+            try:
+                chunk = self.sock.recv(65536)
+            except BlockingIOError:
+                return
+            except OSError:
+                self.eof = True
+                return
+            if not chunk:
+                self.eof = True
+                return
+            text = chunk.decode("utf-8", errors="replace")
+            self.buffer += text
+            self._fh.write(text)
+            self._fh.flush()
+            if len(self.buffer) > 1_000_000:
+                # Boot logs can be long; keep enough tail for diagnosis.
+                self.buffer = self.buffer[-500_000:]
+
+    def send(self, text: str) -> None:
+        try:
+            self.sock.sendall(text.encode("utf-8"))
+        except OSError as exc:
+            raise Failure(f"could not write to the serial console: {exc}") from exc
+
+    def sendline(self, line: str = "") -> None:
+        self.send(line + "\r")
+
+    def expect(self, pattern: str, timeout: float, label: str) -> tuple[str, re.Match[str]]:
+        """Wait for a pattern and return (output-before-match, match).
+
+        The returned output is what the guest printed before the match; it is
+        deliberately not discarded so callers (``command``) can use it.
+        """
+        rx = re.compile(pattern, re.S | re.M)
+        deadline = time.time() + timeout
+        while True:
+            self._read()
+            match = rx.search(self.buffer)
+            if match:
+                output = ANSI_RE.sub("", self.buffer[: match.start()])
+                self.buffer = self.buffer[match.end() :]
+                return output, match
+            if self.eof:
+                tail = ANSI_RE.sub("", self.buffer)[-2000:]
+                raise Failure(f"serial connection closed while waiting for {label}; tail:\n{tail}")
+            if time.time() > deadline:
+                tail = ANSI_RE.sub("", self.buffer)[-2000:]
+                raise Failure(f"timed out waiting for {label}; serial tail:\n{tail}")
+            time.sleep(0.2)
+
+    def wait_for_text(self, pattern: str, timeout: float, label: str) -> str:
+        return self.expect(pattern, timeout, label)[0]
+
+    def _login_prompt(self, timeout: float) -> None:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            # agetty's prompt may have been printed before this socket connected,
+            # so a newline makes it print a fresh one.
+            self.sendline()
+            try:
+                self.expect(r"login: ", 8, "serial login prompt")
+                return
+            except Failure:
+                if time.time() > deadline:
+                    break
+                continue
+        tail = ANSI_RE.sub("", self.buffer)[-2000:]
+        raise Failure(f"the serial console never showed a login prompt; tail:\n{tail}")
+
+    def login(self, username: str, password: str, timeout: float = 420) -> None:
+        self.log("waiting for the serial login prompt")
+        self._login_prompt(timeout)
+        self.sendline(username)
+        self.expect(r"Password:", 30, "serial password prompt")
+        self.sendline(password)
+        self.expect(r"[$#] ", 60, "serial user shell")
+        self.log("logged in on the serial console")
+
+    def root_shell(self, password: str = "live", timeout: float = 120) -> None:
+        """Start ``sudo -i`` without blocking command() on an interactive shell."""
+        self.log("opening a root shell with sudo -i")
+        self.sendline("sudo -i")
+        _, match = self.expect(
+            r"[Pp]assword:|root@[^\s:]+:[^\r\n]*# ", timeout, "root shell"
+        )
+        if "assword:" in match.group(0):
+            self.sendline(password)
+            self.expect(r"root@[^\s:]+:[^\r\n]*# ", 60, "root shell")
+        uid = self.command("id -u", timeout=30)
+        if uid.strip() != "0":
+            raise Failure(f"sudo -i did not give a root shell (id -u = {uid!r})")
+        self.command("cd /", timeout=30)
+        self.log("root shell is ready")
+
+    def command(self, command: str, timeout: float = 60, check: bool = True) -> str:
+        marker = f"__SAMURAI_DONE_{self.counter}_{os.getpid()}__"
+        self.counter += 1
+        self.sendline(f"{command}; echo {marker}:$?")
+        output, match = self.expect(
+            re.escape(marker) + r":([0-9]+)", timeout, f"command: {command}"
+        )
+        status = int(match.group(1))
+        lines = output.splitlines()
+        # The tty echoes the command line back before its output.
+        if lines and (marker in lines[0] or lines[0].strip().startswith(command.strip()[:40])):
+            lines = lines[1:]
+        clean = "\n".join(line for line in lines if marker not in line).strip()
+        self.log(f"serial: {command} -> {status}")
+        if clean:
+            self.log("serial output:\n" + clean[-4000:])
+        if check and status != 0:
+            raise Failure(f"serial command failed ({status}): {command}\n{clean}")
+        return clean
+
+    def write_file(self, path: str, content: str) -> None:
+        """Write a guest file without fighting the serial line's quoting rules."""
+        payload = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        self.command(
+            f"printf %s {shlex.quote(payload)} | base64 -d > {shlex.quote(path)}",
+            timeout=60,
+        )
+
+
+class VNC:
+    """Drive the QEMU VNC display with vncdo."""
+
+    def __init__(self, server: str, artifact_dir: Path, log: Log):
+        self.server = server
+        self.artifact_dir = artifact_dir
+        self.log = log
+        self._captures = 0
+
+    def _run(self, *args: str, timeout: int = 30) -> subprocess.CompletedProcess:
+        last: subprocess.CompletedProcess | None = None
+        for attempt in range(3):
+            try:
+                last = run(["vncdo", "-s", self.server, *map(str, args)], timeout=timeout)
+                return last
+            except (Failure, subprocess.TimeoutExpired) as exc:
+                self.log(f"vncdo attempt {attempt + 1} failed: {exc}")
+                time.sleep(2)
+        raise Failure(
+            f"vncdo failed: {' '.join(map(str, args))}\n{getattr(last, 'stdout', '')}"
+        )
+
+    def key(self, key: str) -> None:
+        self.log(f"vnc: key {key}")
+        self._run("key", key)
+
+    def type(self, text: str) -> None:
+        self.log(f"vnc: type {text!r}")
+        self._run("type", text)
+
+    def click(self, x: int, y: int) -> None:
+        self.log(f"vnc: click {x},{y}")
+        self._run("move", str(x), str(y), "click", "1")
+
+    def capture(self, name: str) -> Path:
+        self._captures += 1
+        path = self.artifact_dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._run("capture", str(path))
+        return path
+
+    def stable_capture(self, name: str, quiet: float = 0.8, attempts: int = 6) -> Path:
+        """Capture until two consecutive frames are byte-identical.
+
+        vncdotool has no 'stable' command; polling in the driver keeps the
+        dependency on its documented commands only.
+        """
+        path = self.artifact_dir / name
+        previous: bytes | None = None
+        for _ in range(attempts):
+            self.capture(name)
+            data = path.read_bytes()
+            if data == previous:
+                return path
+            previous = data
+            time.sleep(quiet)
+        return path
+
+
+class OCR:
+    """Tesseract with a small amount of preprocessing for 1024x768 screens."""
+
+    SCALE = 2
+
+    def __init__(self, artifact_dir: Path, log: Log):
+        self.artifact_dir = artifact_dir
+        self.log = log
+        self._prepared_dir = artifact_dir / "ocr"
+        self._prepared_dir.mkdir(parents=True, exist_ok=True)
+        self._cache: dict[tuple[str, int, int, int], str] = {}
+        self._warned = False
+
+    def _prepare(self, image: Path) -> tuple[Path, int]:
+        try:
+            from PIL import Image, ImageOps
+        except ImportError:
+            if not self._warned:
+                self.log("Pillow is not installed; OCR runs on the raw screenshot")
+                self._warned = True
+            return image, 1
+
+        prepared = self._prepared_dir / f"{image.stem}-ocr.png"
+        with Image.open(image) as im:
+            im = im.convert("L")
+            im = ImageOps.autocontrast(im)
+            resample = getattr(Image, "Resampling", Image).LANCZOS
+            im = im.resize((im.width * self.SCALE, im.height * self.SCALE), resample)
+            im.save(prepared)
+        return prepared, self.SCALE
+
+    def text(self, image: Path, psm: int = 11) -> str:
+        stat = image.stat()
+        key = (str(image), psm, stat.st_mtime_ns, stat.st_size)
+        if key in self._cache:
+            return self._cache[key]
+        prepared, _ = self._prepare(image)
+        result = run(
+            ["tesseract", str(prepared), "stdout", "--psm", str(psm)],
+            check=False,
+            timeout=120,
+        )
+        text = result.stdout or ""
+        self._cache[key] = text
+        return text
+
+    def words(self, image: Path, psm: int = 11) -> list[dict]:
+        prepared, scale = self._prepare(image)
+        result = run(
+            ["tesseract", str(prepared), "stdout", "--psm", str(psm), "tsv"],
+            check=False,
+            timeout=120,
+        )
+        words = []
+        for line in (result.stdout or "").splitlines():
+            parts = line.split("\t")
+            if len(parts) < 12 or parts[0] != "5":
+                continue
+            try:
+                conf = float(parts[10])
+                left, top, width, height = (int(parts[i]) for i in range(6, 10))
+            except ValueError:
+                continue
+            value = parts[11].strip()
+            if value and conf >= 35:
+                words.append(
+                    {
+                        "text": value,
+                        "left": left // scale,
+                        "top": top // scale,
+                        "width": width // scale,
+                        "height": height // scale,
+                        "conf": conf,
+                    }
+                )
+        return words
+
+
+class InstallerTest:
+    def __init__(self, args: argparse.Namespace):
+        self.iso = Path(args.iso).resolve()
+        self.work = Path(args.work_dir).resolve()
+        self.work.mkdir(parents=True, exist_ok=True)
+        self.log = Log(self.work / "driver.log")
+        self.ocr = OCR(self.work, self.log)
+        self.vnc_server = f"127.0.0.1::{args.vnc_port}"
+        self.vnc = VNC(self.vnc_server, self.work, self.log)
+        self.disk = self.work / "disk.qcow2"
+        self.install_serial = self.work / "install-serial.log"
+        self.reboot_serial = self.work / "installed-serial.log"
+        self.qemu: subprocess.Popen | None = None
+        self.serial: SerialConsole | None = None
+        self.timeout = args.timeout
+        self.disk_size = args.disk_size
+        self.vnc_display = args.vnc_port - 5900
+        self.reboot_timeout = args.reboot_timeout
+        self.password = args.password
+        self.branded = args.branded
+        self.root_ready = False
+        self.log_copied = False
+        if not 1 <= self.vnc_display <= 99:
+            raise Failure(f"VNC port must be between 5901 and 5999, got {args.vnc_port}")
+
+    # -- QEMU ---------------------------------------------------------
+
+    def _qemu_base(self) -> list[str]:
+        args = [
+            "qemu-system-x86_64",
+            "-name",
+            "Samurai Linux install test",
+            "-m",
+            "4096",
+            "-smp",
+            "4",
+            "-display",
+            f"vnc=127.0.0.1:{self.vnc_display}",
+            "-vga",
+            "std",
+            "-monitor",
+            "none",
+            "-no-reboot",
+            "-rtc",
+            "base=utc",
+        ]
+        if os.access("/dev/kvm", os.W_OK):
+            args += ["-enable-kvm", "-cpu", "host"]
+        else:
+            args += ["-accel", "tcg,thread=multi", "-cpu", "max"]
+        return args
+
+    def _start_vm(self, extra: list[str], serial_sock: Path, qemu_log: Path) -> None:
+        cmd = self._qemu_base() + extra
+        serial_sock.unlink(missing_ok=True)
+        with qemu_log.open("w", encoding="utf-8") as fh:
+            self.log("starting VM: " + " ".join(cmd))
+            self.qemu = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT)
+        for _ in range(120):
+            if serial_sock.exists():
+                break
+            if self.qemu.poll() is not None:
+                raise Failure(f"QEMU exited before the serial socket appeared; see {qemu_log}")
+            time.sleep(0.5)
+        else:
+            raise Failure("QEMU did not create the serial socket")
+
+    def start_install_vm(self) -> None:
+        self.disk.unlink(missing_ok=True)
+        run(["qemu-img", "create", "-f", "qcow2", str(self.disk), self.disk_size])
+        serial_sock = self.work / "serial-install.sock"
+        self._start_vm(
+            [
+                "-drive",
+                f"file={self.disk},format=qcow2,if=ide,cache=writeback",
+                "-cdrom",
+                str(self.iso),
+                "-boot",
+                "d",
+                "-serial",
+                f"unix:{serial_sock},server=on,wait=off",
+                "-net",
+                "none",
+            ],
+            serial_sock,
+            self.work / "qemu-install.log",
+        )
+        self.serial = SerialConsole(self.install_serial, self.log, path=serial_sock)
+
+    def start_reboot_vm(self) -> None:
+        serial_sock = self.work / "serial-installed.sock"
+        self._start_vm(
+            [
+                "-drive",
+                f"file={self.disk},format=qcow2,if=ide,cache=writeback",
+                "-boot",
+                "c",
+                "-serial",
+                f"unix:{serial_sock},server=on,wait=off",
+                "-net",
+                "none",
+            ],
+            serial_sock,
+            self.work / "qemu-installed.log",
+        )
+        self.serial = SerialConsole(self.reboot_serial, self.log, path=serial_sock)
+
+    def stop_vm(self) -> None:
+        if self.serial:
+            self.serial.close()
+            self.serial = None
+        if self.qemu and self.qemu.poll() is None:
+            self.qemu.terminate()
+            try:
+                self.qemu.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                self.qemu.kill()
+                self.qemu.wait()
+        self.qemu = None
+
+    def wait_for_guest_exit(self, timeout: int = 180) -> None:
+        if not self.qemu:
+            return
+        try:
+            self.qemu.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self.log("guest did not power off; terminating QEMU")
+
+    # -- OCR helpers ---------------------------------------------------
+
+    def ocr_text(self, image: Path) -> str:
+        return self.ocr.text(image)
+
+    def wait_for(self, needle: str, label: str, timeout: float, screenshot: str) -> Path:
+        needle_l = needle.lower()
+        deadline = time.time() + timeout
+        last_text = ""
+        attempt = 0
+        while time.time() < deadline:
+            attempt += 1
+            image = self.vnc.stable_capture(f"{screenshot}-{attempt:02d}.png")
+            text = self.ocr_text(image)
+            last_text = text
+            normalized = re.sub(r"\s+", " ", text.lower())
+            if needle_l in normalized:
+                self.log(f"detected {label!r}")
+                return self.vnc.stable_capture(f"{screenshot}.png")
+            if "installation failed" in normalized or "installer failed" in normalized:
+                raise Failure(f"Calamares reported a failure while waiting for {label}; see {image}")
+            time.sleep(4)
+        self.vnc.capture(f"{screenshot}-timeout.png")
+        raise Failure(
+            f"timed out waiting for {label!r}; last OCR text:\n{last_text[-3000:]}"
+        )
+
+    def click_word(self, word: str) -> bool:
+        """Click the lowest matching word (buttons live below page content)."""
+        image = self.vnc.stable_capture("lookup.png")
+        matches = [
+            item for item in self.ocr.words(image) if word.lower() in item["text"].lower()
+        ]
+        if not matches:
+            return False
+        target = max(matches, key=lambda item: item["top"])
+        x = target["left"] + target["width"] // 2
+        y = target["top"] + target["height"] // 2
+        self.vnc.click(x, y)
+        return True
+
+    def advance(self, needle: str, label: str, timeout: float, screenshot: str) -> None:
+        if not self.click_word("next"):
+            self.vnc.key("alt-n")
+        self.wait_for(needle, label, timeout, screenshot)
+
+    # -- install flow --------------------------------------------------
+
+    def configure_calamares_for_test(self) -> None:
+        """Preseed only the choices that would otherwise need a lot of clicking.
+
+        The installer still goes through the real partition, mount, unpackfs,
+        bootloader, packages and initramfs jobs.
+        """
+        assert self.serial
+        self.serial.write_file(
+            "/etc/calamares/modules/partition.conf",
+            "---\n"
+            "initialPartitioningChoice: erase\n"
+            "initialSwapChoice: none\n"
+            "defaultFileSystemType: ext4\n",
+        )
+        self.serial.write_file(
+            "/etc/calamares/modules/grubcfg.conf",
+            "---\n"
+            "overwrite: false\n"
+            "keep_distributor: false\n"
+            "prefer_grub_d: false\n"
+            "kernel_params: [ quiet, console=ttyS0,115200n8 ]\n",
+        )
+        self.serial.write_file(
+            "/etc/calamares/modules/locale.conf",
+            "---\nuseSystemTimezone: true\n",
+        )
+        self.log("wrote Calamares test overlays")
+
+    def launch_calamares(self) -> None:
+        # The Debian wrapper moves the live fstab aside because it confuses
+        # Calamares' partition module.
+        assert self.serial
+        self.serial.command(
+            "if [ -e /etc/fstab ]; then mv /etc/fstab /etc/fstab.orig.calamares; fi",
+            timeout=30,
+            check=False,
+        )
+        self.serial.command(
+            "i=0; while [ $i -lt 60 ] && [ ! -S /tmp/.X11-unix/X0 ]; do "
+            "sleep 2; i=$((i+1)); done; test -S /tmp/.X11-unix/X0",
+            timeout=150,
+        )
+        # Find the live session's X cookie and let root use that display.
+        self.serial.command(
+            "i=0; xa=; while [ $i -lt 60 ]; do "
+            "xa=$(ls /home/samurai/.Xauthority /run/user/1000/xauth_* 2>/dev/null | head -n1); "
+            "[ -n \"$xa\" ] && break; sleep 2; i=$((i+1)); done; "
+            "test -n \"$xa\" && install -m 0600 \"$xa\" /root/.Xauthority",
+            timeout=150,
+        )
+        self.serial.command(
+            "DISPLAY=:0 XAUTHORITY=/root/.Xauthority xhost +SI:localuser:root "
+            ">/dev/null 2>&1 || true",
+            timeout=30,
+            check=False,
+        )
+        # QEMU's VNC output follows the active VT, so make Xorg's VT visible.
+        self.serial.command(
+            "vt=$(ps -o tty= -C Xorg 2>/dev/null | tr -d ' ' | head -n1); "
+            "case \"$vt\" in tty[0-9]*) chvt \"${vt#tty}\" ;; esac",
+            timeout=30,
+            check=False,
+        )
+        self.serial.command(
+            "DISPLAY=:0 XAUTHORITY=/root/.Xauthority QT_AUTO_SCREEN_SCALE_FACTOR=1 "
+            "calamares -d >/tmp/calamares.out 2>&1 &",
+            timeout=30,
+        )
+        time.sleep(10)
+        tail = self.serial.command("tail -n 30 /tmp/calamares.out 2>/dev/null || true", timeout=30)
+        running = self.serial.command("pgrep -x calamares >/dev/null && echo yes || echo no", timeout=30)
+        if running.strip() != "yes":
+            raise Failure(f"Calamares is not running; output:\n{tail}")
+        if "cannot connect" in tail.lower() or "could not connect" in tail.lower():
+            raise Failure(f"Calamares could not connect to the live display:\n{tail}")
+
+    def drive_installer(self) -> None:
+        self.wait_for("welcome", "Calamares welcome page", 240, "01-welcome")
+        self.advance("region:", "Calamares locale page", 90, "02-locale")
+        self.advance("layout", "Calamares keyboard page", 90, "03-keyboard")
+        self.advance("erase disk", "Calamares partition page", 120, "04-partition")
+        self.advance("what is your name", "Calamares users page", 120, "05-users")
+
+        # UsersViewStep focuses the full-name field on activation. The tab
+        # order is full name -> login name -> computer name -> password ->
+        # repeat password.
+        self.vnc.type("Samurai Tester")
+        self.vnc.key("tab")
+        self.vnc.key("ctrl-a")
+        self.vnc.type("samurai")
+        self.vnc.key("tab")
+        self.vnc.key("ctrl-a")
+        self.vnc.type("samurai-test")
+        self.vnc.key("tab")
+        self.vnc.type(self.password)
+        self.vnc.key("tab")
+        self.vnc.type(self.password)
+        time.sleep(1)
+        self.vnc.capture("05-users-filled.png")
+        self.advance("overview", "Calamares summary page", 120, "06-summary")
+
+        if not self.click_word("install"):
+            self.vnc.key("alt-i")
+
+        # The exec page has no stable text other than the progress bar. Wait
+        # for the finished page; poll the serial log so a stuck job is visible.
+        self.log("installation started; waiting for the finished page")
+        deadline = time.time() + self.timeout
+        attempt = 0
+        while time.time() < deadline:
+            attempt += 1
+            time.sleep(20)
+            image = self.vnc.stable_capture(f"07-progress-{attempt:02d}.png")
+            text = re.sub(r"\s+", " ", self.ocr_text(image).lower())
+            if "all done" in text:
+                self.vnc.capture("08-finished.png")
+                self.log("Calamares reached the finished page")
+                return
+            if "installation failed" in text or "installer failed" in text:
+                self.vnc.capture("08-failure.png")
+                raise Failure(f"Calamares reported a failure on the finished page; see {image}")
+            try:
+                assert self.serial
+                tail = self.serial.command(
+                    "tail -n 3 /root/.cache/calamares/session.log 2>/dev/null || true",
+                    timeout=30,
+                    check=False,
+                )
+                if tail:
+                    self.log("calamares: " + " | ".join(tail.splitlines()[-3:]))
+            except Failure as exc:
+                self.log(f"could not poll the Calamares log: {exc}")
+        self.vnc.capture("08-timeout.png")
+        raise Failure("timed out waiting for Calamares to finish")
+
+    def copy_calamares_log(self) -> None:
+        """Copy the Calamares session log out over the serial line."""
+        if self.log_copied or not self.root_ready or not self.serial:
+            return
+        self.log("copying the Calamares session log out of the live system")
+        try:
+            self.serial.sendline(
+                f"echo {LOG_BEGIN}; base64 -w0 /root/.cache/calamares/session.log "
+                f"2>/dev/null; echo; echo {LOG_END}"
+            )
+            output, _ = self.serial.expect(
+                r"\r?\n" + LOG_END + r"\r?\n", 240, "Calamares session log"
+            )
+            if LOG_BEGIN not in output:
+                self.log("the Calamares log was empty or unavailable")
+                return
+            payload = output.rsplit(LOG_BEGIN, 1)[1]
+            payload = re.sub(r"[^A-Za-z0-9+/=]", "", payload)
+            if not payload:
+                self.log("the Calamares log was empty")
+                return
+            (self.work / "calamares-session.log").write_bytes(base64.b64decode(payload))
+            self.log("saved calamares-session.log")
+            self.log_copied = True
+        except Exception as exc:  # noqa: BLE001 - diagnostics are best effort
+            self.log(f"could not copy the Calamares log: {exc}")
+
+    def finish_install(self) -> None:
+        # Power off from the serial shell rather than clicking the restart
+        # checkbox. All install jobs have completed by the finished page.
+        assert self.serial
+        self.serial.command("sync", timeout=120, check=False)
+        # No marker: poweroff tears the shell down before it could be printed.
+        self.serial.sendline("poweroff -f")
+        self.wait_for_guest_exit()
+        self.stop_vm()
+
+    # -- post-install verification ------------------------------------
+
+    def verify_installed_system(self) -> None:
+        self.start_reboot_vm()
+        assert self.serial
+        self.serial.login("samurai", self.password, timeout=self.reboot_timeout)
+
+        commands = [
+            ("cat /etc/os-release", "os-release"),
+            ("hostname", "hostname"),
+            ("findmnt -n -o SOURCE /", "root source"),
+            ("findmnt -n -o FSTYPE /", "root filesystem"),
+            ("stat -c '%U' /home/samurai", "home owner"),
+            ("cat /proc/cmdline", "kernel command line"),
+            ("grep -E 'Samurai Linux|console=ttyS0' /boot/grub/grub.cfg | head -n 10", "installed GRUB"),
+            ("cat /etc/default/grub", "grub defaults"),
+            ("test -s /usr/share/samurai/boot/grub-splash.png && echo present || echo missing", "GRUB splash"),
+            ("cat /etc/motd", "motd"),
+            ("dpkg-query -W -f='${Status}\\n' live-boot 2>/dev/null || true", "live-boot status"),
+            ("systemctl is-system-running 2>/dev/null || true", "system state"),
+            ("systemctl --failed --no-legend 2>/dev/null | head -n 10 || true", "failed units"),
+            ("lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT", "block devices"),
+        ]
+        report = []
+        values: dict[str, str] = {}
+        for command, label in commands:
+            output = self.serial.command(command, timeout=60, check=False)
+            values[label] = output
+            report.append(f"### {label}\n$ {command}\n{output}\n")
+        (self.work / "installed-system.txt").write_text("\n".join(report), encoding="utf-8")
+
+        hostname = values.get("hostname", "").strip()
+        if hostname != "samurai-test":
+            raise Failure(f"installed hostname is {hostname!r}, expected 'samurai-test'")
+        root_source = values.get("root source", "").strip()
+        if not root_source.startswith("/dev/"):
+            raise Failure(f"installed root is {root_source!r}, not a disk device")
+        if values.get("home owner", "").strip() != "samurai":
+            raise Failure("the installed system has no /home/samurai owned by samurai")
+        if "console=ttyS0,115200n8" not in values.get("kernel command line", ""):
+            raise Failure("the installed kernel did not receive the serial console argument")
+        if "console=ttyS0,115200n8" not in values.get("installed GRUB", ""):
+            raise Failure("the installed GRUB configuration lost the serial console argument")
+        os_release = values.get("os-release", "")
+        if "NAME=" not in os_release:
+            raise Failure("the installed system has no /etc/os-release")
+        if self.branded:
+            if 'NAME="Samurai Linux"' not in os_release:
+                raise Failure(f"installed os-release is not Samurai-branded:\n{os_release}")
+            grub_default = values.get("grub defaults", "")
+            if 'GRUB_DISTRIBUTOR="Samurai Linux"' not in grub_default:
+                raise Failure("installed /etc/default/grub is not Samurai-branded")
+            if 'GRUB_BACKGROUND="/usr/share/samurai/boot/grub-splash.png"' not in grub_default:
+                raise Failure("installed GRUB does not use the Samurai background")
+            if values.get("GRUB splash", "").strip() != "present":
+                raise Failure("the installed system is missing the Samurai GRUB splash")
+            if "Samurai Linux" not in values.get("motd", ""):
+                raise Failure("the installed /etc/motd is not Samurai-branded")
+            if "Samurai Linux" not in values.get("installed GRUB", ""):
+                raise Failure("the installed GRUB menu does not mention Samurai Linux")
+            self.log("Samurai branding verification passed")
+
+        self.log("installed system verification passed")
+        self.serial.command("sync", timeout=60, check=False)
+        self.serial.sendline("poweroff -f")
+        self.wait_for_guest_exit()
+        self.stop_vm()
+
+    # -- orchestration -------------------------------------------------
+
+    def run(self) -> None:
+        for tool in ("qemu-system-x86_64", "qemu-img", "vncdo", "tesseract"):
+            if not shutil.which(tool):
+                raise Failure(f"required tool is not installed: {tool}")
+        if not self.iso.is_file():
+            raise Failure(f"ISO not found: {self.iso}")
+
+        self.log(f"ISO: {self.iso}")
+        self.log(f"work directory: {self.work}")
+        self.start_install_vm()
+        try:
+            assert self.serial
+            self.serial.login("samurai", "live")
+            self.serial.root_shell()
+            self.root_ready = True
+            self.configure_calamares_for_test()
+            self.launch_calamares()
+            self.drive_installer()
+        except Exception:
+            self.copy_calamares_log()
+            raise
+        self.copy_calamares_log()
+        self.finish_install()
+        self.verify_installed_system()
+        self.log("install test passed")
+
+
+def _fake_shell(sock: socket.socket) -> None:
+    """A tiny tty for the self-test: echoes input and answers markers."""
+    pending = b""
+    while True:
+        try:
+            chunk = sock.recv(4096)
+        except OSError:
+            return
+        if not chunk:
+            return
+        pending += chunk
+        while b"\r" in pending:
+            line, pending = pending.split(b"\r", 1)
+            text = line.decode("utf-8", errors="replace")
+            sock.sendall((text + "\r\n").encode())
+            if text.strip() == "sudo -i":
+                sock.sendall(b"root@samurai:~# ")
+                continue
+            if text.strip() == "echo password":
+                sock.sendall(b"Password: ")
+                continue
+            if "; echo __SAMURAI_DONE_" in text:
+                command, _, rest = text.rpartition("; echo ")
+                marker = rest.split(":")[0]
+                output = ""
+                if command.strip() == "echo hello":
+                    output = "hello\r\n"
+                elif command.strip() == "id -u":
+                    output = "0\r\n"
+                sock.sendall((output + f"{marker}:0\r\n").encode())
+            else:
+                sock.sendall(b"$ ")
+
+
+def self_test() -> int:
+    host, guest = socket.socketpair()
+    thread = threading.Thread(target=_fake_shell, args=(guest,), daemon=True)
+    thread.start()
+    failures = 0
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        log = Log(Path(tmp) / "self-test.log")
+        console = SerialConsole(Path(tmp) / "transcript.log", log, sock=host)
+        try:
+            console.sendline("echo password")
+            output, match = console.expect("Password:", 5, "password prompt")
+            if not output.startswith("echo password"):
+                print(f"FAIL: expect() dropped pre-match output: {output!r}", file=sys.stderr)
+                failures += 1
+            if match.group(0) != "Password:":
+                print("FAIL: expect() matched the wrong text", file=sys.stderr)
+                failures += 1
+            if console.command("echo hello") != "hello":
+                print("FAIL: command() did not return its output", file=sys.stderr)
+                failures += 1
+            empty = console.command("true")
+            if empty:
+                print(f"FAIL: command() returned tty noise for empty output: {empty!r}", file=sys.stderr)
+                failures += 1
+            console.root_shell()
+            if console.command("id -u") != "0":
+                print("FAIL: root_shell() did not reach the fake root shell", file=sys.stderr)
+                failures += 1
+            if failures == 0:
+                print("install-test self-test passed")
+        finally:
+            console.close()
+            log.close()
+    guest.close()
+    return 1 if failures else 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("iso", nargs="?", help="Samurai Linux ISO to install")
+    parser.add_argument(
+        "--work-dir",
+        default=str(Path(__file__).resolve().parent / "install-test"),
+        help="directory for the disk, logs, and screenshots",
+    )
+    parser.add_argument("--disk-size", default="20G", help="size of the blank target disk")
+    parser.add_argument("--timeout", type=int, default=2700, help="seconds allowed for the install")
+    parser.add_argument(
+        "--reboot-timeout", type=int, default=900, help="seconds allowed for the installed boot"
+    )
+    parser.add_argument("--vnc-port", type=int, default=5901, help="QEMU VNC port (5901+)")
+    parser.add_argument(
+        "--password",
+        default="Kuro2026Qz",
+        help="password for the installed samurai account",
+    )
+    parser.add_argument(
+        "--branded",
+        action="store_true",
+        help="require Samurai branding on the installed system",
+    )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="test the serial console logic without QEMU and exit",
+    )
+    args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
+    if not args.iso:
+        parser.error("an ISO path is required unless --self-test is used")
+
+    test = InstallerTest(args)
+    try:
+        test.run()
+    except Exception as exc:  # noqa: BLE001 - report everything as a CI failure
+        test.log(f"FAILED: {exc}")
+        try:
+            test.vnc.capture("failure-final.png")
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            test.copy_calamares_log()
+        except Exception:  # noqa: BLE001
+            pass
+        test.stop_vm()
+        test.log.close()
+        print(f"\nInstall test failed: {exc}", file=sys.stderr)
+        return 1
+    test.log.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

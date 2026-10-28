@@ -1,0 +1,80 @@
+#!/bin/sh
+# Remove Debian user-facing branding from the live image and from systems
+# installed from it. Package management still points at Debian (ID_LIKE=debian,
+# VERSION_CODENAME=trixie) because Samurai Linux is built from Debian packages.
+set -eu
+
+# Debian ships /etc/os-release as a symlink to /usr/lib/os-release. Replace both
+# so tools that read either path report Samurai Linux.
+rm -f /etc/os-release
+cat > /etc/os-release <<'EOF'
+PRETTY_NAME="Samurai Linux 2026.10"
+NAME="Samurai Linux"
+VERSION_ID="2026.10"
+VERSION="2026.10 (Kuro Edition)"
+VERSION_CODENAME=trixie
+ID=samurai
+ID_LIKE=debian
+ANSI_COLOR="1;31"
+HOME_URL="https://github.com/Mephisto-Von/Linux-OS"
+SUPPORT_URL="https://github.com/Mephisto-Von/Linux-OS/issues"
+BUG_REPORT_URL="https://github.com/Mephisto-Von/Linux-OS/issues"
+LOGO=samurai-linux
+EOF
+cp /etc/os-release /usr/lib/os-release
+
+cat > /etc/issue <<'EOF'
+Samurai Linux 2026.10 \n \l
+EOF
+cp /etc/issue /etc/issue.net
+
+cat > /etc/lsb-release <<'EOF'
+DISTRIB_ID=Samurai
+DISTRIB_RELEASE=2026.10
+DISTRIB_CODENAME=trixie
+DISTRIB_DESCRIPTION="Samurai Linux 2026.10"
+EOF
+
+# Replace the Debian copyright notice shown after login.
+rm -f /etc/motd
+cat > /etc/motd <<'EOF'
+Welcome to Samurai Linux 2026.10 (Kuro Edition).
+
+  * Install to disk: launch "Install Samurai Linux" from the desktop.
+  * AI tools:        samurai-ai --help
+  * Theme tools:     samurai-theme --help
+  * Gaming setup:    samurai-gaming --help
+
+Documentation and issue tracker: https://github.com/Mephisto-Von/Linux-OS
+EOF
+
+install -d -m 0755 /usr/share/pixmaps
+if [ -f /etc/calamares/branding/samurai/productIcon.png ]; then
+    install -m 0644 /etc/calamares/branding/samurai/productIcon.png \
+        /usr/share/pixmaps/samurai-linux.png
+fi
+
+# Brand the installed system's GRUB and keep a serial console available for
+# headless installs and automated tests.
+grub_default=/etc/default/grub
+if [ -f "$grub_default" ]; then
+    if grep -q '^GRUB_DISTRIBUTOR=' "$grub_default"; then
+        sed -i 's|^GRUB_DISTRIBUTOR=.*|GRUB_DISTRIBUTOR="Samurai Linux"|' "$grub_default"
+    else
+        printf '\nGRUB_DISTRIBUTOR="Samurai Linux"\n' >> "$grub_default"
+    fi
+
+    if ! grep -q '^GRUB_BACKGROUND=' "$grub_default"; then
+        printf 'GRUB_BACKGROUND="/usr/share/samurai/boot/grub-splash.png"\n' >> "$grub_default"
+    fi
+
+    if ! grep -q 'console=ttyS0,115200n8' "$grub_default"; then
+        if grep -q '^GRUB_CMDLINE_LINUX_DEFAULT=' "$grub_default"; then
+            sed -i -E \
+                's|^(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*)"|\1 console=ttyS0,115200n8"|' \
+                "$grub_default"
+        else
+            printf 'GRUB_CMDLINE_LINUX_DEFAULT="quiet console=ttyS0,115200n8"\n' >> "$grub_default"
+        fi
+    fi
+fi

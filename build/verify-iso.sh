@@ -5,6 +5,7 @@ set -euo pipefail
 
 ISO="${1:-}"
 TMP_DIR=""
+REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 
 log() { printf '==> %s\n' "$*"; }
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
@@ -41,6 +42,18 @@ assert_contains() {
     grep -Eq "$pattern" "$ROOT/$path" || die "/$path does not match: $pattern"
 }
 
+assert_not_contains() {
+    local path=$1 pattern=$2
+    if grep -Eq "$pattern" "$ROOT/$path"; then
+        die "/$path still matches: $pattern"
+    fi
+}
+
+assert_file_contains() {
+    local path=$1 pattern=$2
+    grep -Eq "$pattern" "$path" || die "$path does not match: $pattern"
+}
+
 log "ISO: $ISO ($(du -h "$ISO" | cut -f1))"
 
 log "Checking ISO boot records"
@@ -56,8 +69,13 @@ xorriso -osirrox on -indev "$ISO" \
     -extract /live/initrd.img "$TMP_DIR/initrd.img" \
     -extract /live/filesystem.squashfs "$SQUASHFS" \
     -extract /isolinux/isolinux.cfg "$TMP_DIR/isolinux.cfg" \
+    -extract /isolinux/menu.cfg "$TMP_DIR/menu.cfg" \
+    -extract /isolinux/stdmenu.cfg "$TMP_DIR/stdmenu.cfg" \
     -extract /isolinux/live.cfg "$TMP_DIR/live.cfg" \
-    -extract /boot/grub/grub.cfg "$TMP_DIR/grub.cfg" >/dev/null
+    -extract /isolinux/splash.png "$TMP_DIR/isolinux-splash.png" \
+    -extract /boot/grub/grub.cfg "$TMP_DIR/grub.cfg" \
+    -extract /boot/grub/splash.png "$TMP_DIR/grub-splash.png" \
+    -extract /boot/grub/live-theme/theme.txt "$TMP_DIR/grub-theme.txt" >/dev/null
 [[ -s "$TMP_DIR/vmlinuz" ]] || die "ISO is missing /live/vmlinuz"
 [[ -s "$TMP_DIR/initrd.img" ]] || die "ISO is missing /live/initrd.img"
 [[ -s "$SQUASHFS" ]] || die "ISO is missing /live/filesystem.squashfs"
@@ -69,6 +87,20 @@ grep -q 'console=ttyS0,115200n8' "$TMP_DIR/live.cfg" \
     || die "/isolinux/live.cfg does not pass console=ttyS0,115200n8"
 grep -q 'console=ttyS0,115200n8' "$TMP_DIR/grub.cfg" \
     || die "/boot/grub/grub.cfg does not pass console=ttyS0,115200n8"
+
+log "Checking Samurai bootloader branding"
+assert_file_contains "$TMP_DIR/menu.cfg" '^menu title Samurai Linux 2026\.10$'
+assert_file_contains "$TMP_DIR/live.cfg" 'Samurai Linux Live'
+assert_file_contains "$TMP_DIR/grub.cfg" 'Samurai Linux Live'
+assert_file_contains "$TMP_DIR/stdmenu.cfg" '#b52832ff'
+assert_file_contains "$TMP_DIR/grub-theme.txt" '^title-text: ""$'
+if grep -Eqi 'Debian' "$TMP_DIR/live.cfg" "$TMP_DIR/grub.cfg"; then
+    die "the live boot menus still mention Debian"
+fi
+cmp -s "$TMP_DIR/isolinux-splash.png" "$REPO_ROOT/build/config/bootloaders/isolinux/splash.png" \
+    || die "/isolinux/splash.png is not the Samurai splash"
+cmp -s "$TMP_DIR/grub-splash.png" "$REPO_ROOT/build/config/bootloaders/grub-pc/splash.png" \
+    || die "/boot/grub/splash.png is not the Samurai splash"
 
 log "Extracting installer files from the live rootfs"
 unsquashfs -f -no-progress -d "$ROOT" "$SQUASHFS" \
@@ -88,8 +120,16 @@ unsquashfs -f -no-progress -d "$ROOT" "$SQUASHFS" \
     usr/share/color-schemes/samurai-kuro.colors \
     usr/share/color-schemes/samurai-shiro.colors \
     usr/share/applications/calamares-install-debian.desktop \
+    usr/share/samurai/boot/grub-splash.png \
+    usr/share/pixmaps/samurai-linux.png \
     usr/lib/grub/i386-pc/normal.mod \
     usr/lib/grub/x86_64-efi/normal.mod \
+    etc/os-release \
+    etc/issue \
+    etc/issue.net \
+    etc/lsb-release \
+    etc/motd \
+    etc/default/grub \
     var/lib/dpkg/status >/dev/null
 
 assert_file etc/calamares/settings.conf
@@ -108,8 +148,16 @@ assert_file usr/local/bin/samurai-gaming
 assert_file usr/share/color-schemes/samurai-kuro.colors
 assert_file usr/share/color-schemes/samurai-shiro.colors
 assert_file usr/share/applications/calamares-install-debian.desktop
+assert_file usr/share/samurai/boot/grub-splash.png
+assert_file usr/share/pixmaps/samurai-linux.png
 assert_file usr/lib/grub/i386-pc/normal.mod
 assert_file usr/lib/grub/x86_64-efi/normal.mod
+assert_file etc/os-release
+assert_file etc/issue
+assert_file etc/issue.net
+assert_file etc/lsb-release
+assert_file etc/motd
+assert_file etc/default/grub
 assert_file var/lib/dpkg/status
 
 log "Checking Calamares branding and desktop entry"
@@ -120,6 +168,25 @@ assert_contains usr/share/applications/calamares-install-debian.desktop \
     '^Name=Install Samurai Linux$'
 assert_contains usr/share/applications/calamares-install-debian.desktop \
     '^Exec=calamares-install-debian$'
+
+log "Checking distribution branding"
+assert_contains etc/os-release '^NAME="Samurai Linux"$'
+assert_contains etc/os-release '^ID=samurai$'
+assert_contains etc/os-release '^PRETTY_NAME="Samurai Linux 2026\.10"$'
+assert_contains etc/os-release '^ID_LIKE=debian$'
+assert_contains etc/issue 'Samurai Linux 2026\.10'
+assert_contains etc/issue.net 'Samurai Linux 2026\.10'
+assert_contains etc/lsb-release '^DISTRIB_ID=Samurai$'
+assert_contains etc/motd 'Welcome to Samurai Linux'
+assert_not_contains etc/os-release 'Debian GNU/Linux'
+assert_not_contains etc/issue 'Debian GNU/Linux'
+assert_not_contains etc/issue.net 'Debian GNU/Linux'
+assert_contains etc/default/grub '^GRUB_DISTRIBUTOR="Samurai Linux"$'
+assert_contains etc/default/grub '^GRUB_BACKGROUND="/usr/share/samurai/boot/grub-splash.png"$'
+assert_contains etc/default/grub 'console=ttyS0,115200n8'
+cmp -s "$ROOT/usr/share/samurai/boot/grub-splash.png" \
+    "$REPO_ROOT/build/config/includes.chroot/usr/share/samurai/boot/grub-splash.png" \
+    || die "the installed GRUB splash is not the Samurai splash"
 
 log "Checking installed packages needed by the installer"
 assert_contains var/lib/dpkg/status '^Package: calamares$'

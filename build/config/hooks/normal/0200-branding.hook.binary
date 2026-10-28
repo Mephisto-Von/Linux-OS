@@ -1,0 +1,43 @@
+#!/bin/sh
+# Finish the bootloader branding in the binary tree. live-build copies the
+# splash images from config/bootloaders before this hook runs, so a missing
+# image means the build would silently fall back to the Debian swirl.
+set -eu
+
+die() { echo "branding hook: $*" >&2; exit 1; }
+
+# The user-provided splash PNGs must be the ones that ended up in the ISO.
+for pair in "isolinux/splash.png:../config/bootloaders/isolinux/splash.png" \
+            "boot/grub/splash.png:../config/bootloaders/grub-pc/splash.png"; do
+    target=${pair%%:*}
+    source=${pair#*:}
+    [ -s "$target" ] || die "missing $target"
+    [ -s "$source" ] || die "missing $source"
+    cmp -s "$target" "$source" || die "$target is not the Samurai splash image"
+done
+
+if [ -f isolinux/menu.cfg ]; then
+    sed -i -E 's/^menu title[[:space:]].*/menu title Samurai Linux 2026.10/' isolinux/menu.cfg
+fi
+
+if [ -f isolinux/stdmenu.cfg ]; then
+    # Debian blue selection bar -> Samurai crimson. Match the field instead of
+    # a specific old color so a live-build theme change cannot break branding.
+    sed -i -E \
+        's|^([[:space:]]*menu color sel[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+)[^[:space:]]+|\1#b52832ff|' \
+        isolinux/stdmenu.cfg
+fi
+
+for cfg in isolinux/live.cfg boot/grub/grub.cfg; do
+    [ -f "$cfg" ] || continue
+    sed -i -e 's/Live system/Samurai Linux Live/g' \
+           -e 's/Debian GNU\/Linux/Samurai Linux/g' \
+           -e 's/Debian Live/Samurai Linux Live/g' \
+           "$cfg"
+done
+
+if [ -f boot/grub/live-theme/theme.txt ]; then
+    # The splash image already contains the product name; keep the GRUB theme
+    # from drawing a second, generic title over it.
+    sed -i -E 's/^title-text:.*/title-text: ""/' boot/grub/live-theme/theme.txt
+fi
