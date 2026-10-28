@@ -860,7 +860,14 @@ class InstallerTest:
             if 'NAME="Samurai Linux"' not in os_release:
                 raise Failure(f"installed os-release is not Samurai-branded:\n{os_release}")
             grub_default = values.get("grub defaults", "")
-            if 'GRUB_DISTRIBUTOR="Samurai Linux"' not in grub_default:
+            # Calamares rewrites GRUB_DISTRIBUTOR with single quotes; the live
+            # hook writes double quotes. Accept either.
+            distributor_ok = any(
+                line.startswith("GRUB_DISTRIBUTOR=")
+                and "Samurai Linux" in line
+                for line in grub_default.splitlines()
+            )
+            if not distributor_ok:
                 raise Failure("installed /etc/default/grub is not Samurai-branded")
             if 'GRUB_BACKGROUND="/usr/share/samurai/boot/grub-splash.png"' not in grub_default:
                 raise Failure("installed GRUB does not use the Samurai background")
