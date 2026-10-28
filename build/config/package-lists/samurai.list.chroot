@@ -37,9 +37,7 @@ calamares-settings-debian
 os-prober
 grub-common
 grub2-common
-grub-pc
 grub-pc-bin
-grub-efi-amd64
 grub-efi-amd64-bin
 efibootmgr
 dosfstools
