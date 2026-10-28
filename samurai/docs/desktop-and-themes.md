@@ -38,6 +38,11 @@ samurai-theme set kuro
 # List themes and show the current selection
 samurai-theme list
 samurai-theme status
+
+# Manage wallpapers
+samurai-theme wallpaper        # list all wallpapers
+samurai-theme wallpaper kuro   # apply a specific wallpaper
+samurai-theme random          # apply a random wallpaper
 ```
 
 The scheme is installed as `~/.local/share/color-schemes/samurai-kuro.colors`
@@ -102,9 +107,10 @@ The generated files are committed, so ISO builds do not need Pillow.
 
 ## Theme Selector
 - **Persistent theme selector** in System Settings -> Appearance
-- **CLI selector** - `samurai-theme kuro|shiro|list|status`
+- **CLI selector** - `samurai-theme kuro|shiro|list|status|wallpaper|random`
 - **Auto mode** - `samurai-theme auto` switches at 06:00 and 18:00
 - **Persistent auto mode** - `samurai-theme install-auto` installs a systemd user timer
+- **Wallpapers** - Samurai art collection (22 pieces) from the project, auto-applied per theme or manually selectable
 - **Contrast testing** - palette values target WCAG AA for body text
 - **Focus states** - crimson/gold focus indicators defined in both schemes
 - **Application behavior** - still needs testing against real KDE applications

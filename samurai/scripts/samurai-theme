@@ -39,9 +39,13 @@ Commands:
   disable-auto  Remove the automatic switching timer
   list          List available themes and the current selection
   status        Show the current theme and installed scheme files
+  wallpaper     List available wallpapers
+  wallpaper <name>  Apply a specific wallpaper (or use theme name)
+  random        Apply a random Samurai wallpaper
 
 Environment:
-  SAMURAI_THEME_DIR   Directory containing kuro/ and shiro/ theme folders
+  SAMURAI_THEME_DIR      Directory containing kuro/ and shiro/ theme folders
+  SAMURAI_WALLPAPER_DIR  Directory containing Samurai wallpapers
 EOF
 }
 
@@ -117,6 +121,57 @@ apply_wallpaper() {
     if command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then
         if plasma-apply-wallpaperimage "$wallpaper" >/dev/null 2>&1; then
             log "Applied wallpaper $(basename "$wallpaper")"
+        else
+            warn "plasma-apply-wallpaperimage failed; the wallpaper was not changed"
+        fi
+    else
+        warn "plasma-apply-wallpaperimage not found; the wallpaper will be applied after the next Plasma login"
+    fi
+}
+
+list_wallpapers() {
+    [[ -d "$WALLPAPER_DIR" ]] || die "Wallpaper directory not found: $WALLPAPER_DIR"
+    log "Available Samurai wallpapers:"
+    local wp base
+    while IFS= read -r wp; do
+        [[ -f "$wp" ]] || continue
+        base=$(basename "$wp")
+        log "  ${base%.jpg}"
+    done < <(find "$WALLPAPER_DIR" -name '*.jpg' -o -name '*.png' | sort)
+}
+
+set_wallpaper() {
+    local name="$1" wallpaper
+    [[ -n "$name" ]] || die "Usage: samurai-theme wallpaper <name>"
+    # Try with .jpg extension
+    if [[ -f "$WALLPAPER_DIR/$name.jpg" ]]; then
+        wallpaper="$WALLPAPER_DIR/$name.jpg"
+    elif [[ -f "$WALLPAPER_DIR/$name.png" ]]; then
+        wallpaper="$WALLPAPER_DIR/$name.png"
+    elif [[ -f "$name" ]]; then
+        wallpaper="$name"
+    else
+        die "Wallpaper not found: $name (try 'samurai-theme wallpaper' to list)"
+    fi
+    if command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then
+        if plasma-apply-wallpaperimage "$wallpaper" >/dev/null 2>&1; then
+            log "Applied wallpaper $(basename "$wallpaper")"
+        else
+            warn "plasma-apply-wallpaperimage failed; the wallpaper was not changed"
+        fi
+    else
+        warn "plasma-apply-wallpaperimage not found; the wallpaper will be applied after the next Plasma login"
+    fi
+}
+
+random_wallpaper() {
+    [[ -d "$WALLPAPER_DIR" ]] || die "Wallpaper directory not found: $WALLPAPER_DIR"
+    local wp
+    wp=$(find "$WALLPAPER_DIR" -type f \( -name '*.jpg' -o -name '*.png' \) | shuf -n 1)
+    [[ -n "$wp" ]] || die "No wallpapers found"
+    if command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then
+        if plasma-apply-wallpaperimage "$wp" >/dev/null 2>&1; then
+            log "Applied random wallpaper $(basename "$wp")"
         else
             warn "plasma-apply-wallpaperimage failed; the wallpaper was not changed"
         fi
@@ -238,6 +293,14 @@ main() {
         disable-auto) cmd_disable_auto ;;
         list) cmd_list ;;
         status) cmd_status ;;
+        wallpaper)
+            if [[ -n "${1:-}" ]]; then
+                set_wallpaper "$1"
+            else
+                list_wallpapers
+            fi
+            ;;
+        random) random_wallpaper ;;
         ""|-h|--help|help) usage ;;
         *) die "Unknown command: $cmd (run: samurai-theme --help)" ;;
     esac
