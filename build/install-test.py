@@ -207,7 +207,25 @@ class SerialConsole:
         self.command("cd /", timeout=30)
         self.log("root shell is ready")
 
+    def background(self, command: str, timeout: float = 30) -> int:
+        """Start a command in the background and return its shell PID.
+
+        ``command()`` cannot be used for this: appending ``; echo ...`` after a
+        trailing ``&`` is a shell syntax error.
+        """
+        marker = f"__SAMURAI_DONE_{self.counter}_{os.getpid()}__"
+        self.counter += 1
+        self.sendline(f"( {command} ) & echo {marker}:$!")
+        _, match = self.expect(
+            re.escape(marker) + r":([0-9]+)", timeout, f"background: {command}"
+        )
+        pid = int(match.group(1))
+        self.log(f"started in the background (pid {pid}): {command}")
+        return pid
+
     def command(self, command: str, timeout: float = 60, check: bool = True) -> str:
+        if command.rstrip().endswith("&"):
+            raise Failure("use background() for a command that ends with '&'")
         marker = f"__SAMURAI_DONE_{self.counter}_{os.getpid()}__"
         self.counter += 1
         self.sendline(f"{command}; echo {marker}:$?")
@@ -612,10 +630,9 @@ class InstallerTest:
             timeout=30,
             check=False,
         )
-        self.serial.command(
+        self.serial.background(
             "DISPLAY=:0 XAUTHORITY=/root/.Xauthority QT_AUTO_SCREEN_SCALE_FACTOR=1 "
-            "calamares -d >/tmp/calamares.out 2>&1 &",
-            timeout=30,
+            "calamares -d >/tmp/calamares.out 2>&1"
         )
         time.sleep(10)
         tail = self.serial.command("tail -n 30 /tmp/calamares.out 2>/dev/null || true", timeout=30)
@@ -839,6 +856,10 @@ def _fake_shell(sock: socket.socket) -> None:
             if text.strip() == "echo password":
                 sock.sendall(b"Password: ")
                 continue
+            if "& echo __SAMURAI_DONE_" in text:
+                marker = text.rsplit("__SAMURAI_DONE_", 1)[1].split(":")[0]
+                sock.sendall(f"__SAMURAI_DONE_{marker}:4242\r\n".encode())
+                continue
             if "; echo __SAMURAI_DONE_" in text:
                 command, _, rest = text.rpartition("; echo ")
                 marker = rest.split(":")[0]
@@ -873,6 +894,9 @@ def self_test() -> int:
                 failures += 1
             if console.command("echo hello") != "hello":
                 print("FAIL: command() did not return its output", file=sys.stderr)
+                failures += 1
+            if console.background("echo background") != 4242:
+                print("FAIL: background() did not return the shell PID", file=sys.stderr)
                 failures += 1
             empty = console.command("true")
             if empty:

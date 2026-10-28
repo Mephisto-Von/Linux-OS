@@ -99,7 +99,7 @@ jobs:
           python3 -m venv /tmp/vncvenv
           /tmp/vncvenv/bin/pip install --disable-pip-version-check vncdotool==1.4.2
           echo "/tmp/vncvenv/bin" >> "$GITHUB_PATH"
-          vncdo --help >/dev/null || /tmp/vncvenv/bin/vncdo --help >/dev/null
+          /tmp/vncvenv/bin/vncdo --help >/dev/null
 
       - name: Show downloaded ISO
         run: ls -lh dist
