@@ -3,9 +3,10 @@ name: Install test
 # Drive the real Calamares UI in QEMU, install to a blank disk, boot the
 # installed system, and verify it over the serial console.
 #
-# The workflow can be called by the ISO build (same-run artifact), dispatched
-# manually with a build run ID, or pushed to while iterating on the harness
-# (uses the newest successful Build ISO (hosted) run).
+# The workflow can be called by the ISO build (same-run artifact) or dispatched
+# manually with a build run ID. It is deliberately not triggered by push: a
+# push would test whatever ISO artifact is newest, which is usually older than
+# the commit being pushed.
 on:
   workflow_dispatch:
     inputs:
@@ -29,11 +30,6 @@ on:
         required: false
         type: boolean
         default: false
-  push:
-    paths:
-      - build/install-test.py
-      - build/install-test.sh
-      - .github/workflows/install-test.yml
 
 permissions:
   contents: read
