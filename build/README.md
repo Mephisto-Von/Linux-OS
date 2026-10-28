@@ -126,7 +126,10 @@ The interactive Calamares installation itself is still not automated; see
 - Developer basics: Git, GCC/Clang via `build-essential`, CMake, Ninja, Python 3
 - `samurai-ai`, `samurai-theme`, and `samurai-gaming` in `/usr/local/bin`
 - Kuro and Shiro KDE color schemes in `/usr/share/color-schemes`
+- 22 Samurai wallpapers in `/usr/share/backgrounds/samurai`; `samurai-theme`
+  applies the theme's wallpaper (`kuro.jpg` / `shiro.jpg`) on theme switch
 - Kuro applied for new users; the theme autostart entry restores the last selection
+  and applies the matching wallpaper
 - Calamares installer with Samurai branding, launched from the live desktop or
   the application menu as **Install Samurai Linux**
 - Calamares runtime tools (`squashfs-tools`/`unsquashfs`, `rsync`, `cryptsetup`)
@@ -150,13 +153,16 @@ The interactive Calamares installation itself is still not automated; see
 | `build/config/includes.chroot/` | Files copied verbatim into the ISO |
 | `samurai/scripts/` | Source of truth for the three CLIs |
 | `samurai/themes/` | Source of truth for the KDE `.colors` schemes |
+| `Samurai Walls/` | Source art for the wallpapers and installer slide |
+| `build/make-wallpapers.py` | Generates 1920x1080 wallpapers + the Calamares slide from that art |
 
-The generated copies under `build/config/includes.chroot/usr/local/bin/` and `.../usr/share/samurai/themes/` are ignored by Git; `build.sh` recreates them on every run.
+The generated copies under `build/config/includes.chroot/usr/local/bin/` and `.../usr/share/samurai/themes/` are ignored by Git; `build.sh` recreates them on every run. The generated wallpapers under `.../usr/share/backgrounds/samurai/` and `.../etc/calamares/branding/samurai/slide1.png` **are** committed, so ISO builds do not need Pillow; rerun `python3 build/make-wallpapers.py` after changing the source art.
 
 ## CI
 
 - `.github/workflows/ci.yml` runs ShellCheck, Python syntax checks, and `tests/smoke.sh` in a `debian:trixie` container.
-- `.github/workflows/build-iso-hosted.yml` builds the ISO on an ephemeral GitHub-hosted runner inside a privileged Debian `trixie` container, verifies the ISO contents, then boot-tests it in QEMU. Trigger it manually from the Actions tab; the ISO and checksum are uploaded as artifacts.
+- `.github/workflows/build-iso-hosted.yml` builds the ISO on an ephemeral GitHub-hosted runner inside a privileged Debian `trixie` container, verifies the ISO contents, boot-tests it in QEMU, then drives the real Calamares installer to a virtual disk (`build/install-test.py`) and boots the installed system.
+- `.github/workflows/install-test.yml` runs the same install test against any earlier build's ISO artifact (dispatch it with a `run_id`, or push a change to the install harness).
 - `.github/workflows/build-iso.yml` builds the ISO on a self-hosted runner labelled `samurai-builder`. The runner needs the tools above, 50+ GiB free disk, and `sudo`; use it for signed release builds.
 
 ## Troubleshooting

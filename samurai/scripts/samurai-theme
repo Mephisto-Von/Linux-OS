@@ -15,6 +15,7 @@ fi
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/samurai"
 SCHEME_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/color-schemes"
+WALLPAPER_DIR="${SAMURAI_WALLPAPER_DIR:-/usr/share/backgrounds/samurai}"
 AUTO_UNIT_DIR="$CONFIG_DIR/systemd/user"
 THEME_MARKER="$CONFIG_DIR/theme"
 
@@ -104,6 +105,24 @@ install_theme() {
     else
         warn "plasma-apply-colorscheme not found; the scheme will be used after the next Plasma login"
     fi
+    apply_wallpaper "$name"
+}
+
+# Each theme ships a wallpaper of the same name (kuro.jpg / shiro.jpg) in
+# /usr/share/backgrounds/samurai. A missing wallpaper is not an error.
+apply_wallpaper() {
+    local name="$1" wallpaper
+    wallpaper="$WALLPAPER_DIR/$name.jpg"
+    [[ -f "$wallpaper" ]] || return 0
+    if command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then
+        if plasma-apply-wallpaperimage "$wallpaper" >/dev/null 2>&1; then
+            log "Applied wallpaper $(basename "$wallpaper")"
+        else
+            warn "plasma-apply-wallpaperimage failed; the wallpaper was not changed"
+        fi
+    else
+        warn "plasma-apply-wallpaperimage not found; the wallpaper will be applied after the next Plasma login"
+    fi
 }
 
 cmd_default() {
@@ -190,6 +209,11 @@ cmd_status() {
     fi
     if command -v kreadconfig6 >/dev/null 2>&1; then
         log "KDE ColorScheme: $(kreadconfig6 --file kdeglobals --group KDE --key ColorScheme 2>/dev/null || true)"
+    fi
+    if [[ -f "$WALLPAPER_DIR/$current.jpg" ]]; then
+        log "Wallpaper: $WALLPAPER_DIR/$current.jpg"
+    else
+        log "Wallpaper: none installed for '$current'"
     fi
     if command -v systemctl >/dev/null 2>&1 &&
         systemctl --user is-enabled samurai-theme-auto.timer >/dev/null 2>&1; then

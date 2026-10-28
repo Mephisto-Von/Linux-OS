@@ -1,9 +1,11 @@
 # Samurai KDE Plasma and Design System
 
 > **Implemented today:** Kuro and Shiro KDE color schemes (`.colors`) installed
-> system-wide and per user, the `samurai-theme` CLI, and the optional systemd
-> user timer. Wallpapers, icon sets, cursors, login-screen branding, and
-> installer artwork are **not included yet**.
+> system-wide and per user, a full set of Samurai wallpapers in
+> `/usr/share/backgrounds/samurai/`, the branded Calamares welcome slide, and
+> the `samurai-theme` CLI that applies colors *and* wallpaper (with an optional
+> systemd user timer). Custom icon sets, cursors, and login-screen branding are
+> **not included yet**.
 
 ## Kuro - Dark Theme
 
@@ -19,11 +21,11 @@
 
 ### Visual Elements
 - **Japanese Samurai motifs**: brushstroke artwork, waves, mountains, moonlight, lacquered black surfaces, crimson accents
-- **Wallpaper**: Original Samurai-themed wallpaper with restrained brushstroke design
-- **Icons**: Custom Samurai icon set with crimson accent highlights
+- **Wallpaper**: `kuro.jpg` - a samurai silhouette against a full moon (dark, high contrast)
+- **Icons**: Custom Samurai icon set with crimson accent highlights (planned)
 - **Terminal colors**: Kuro scheme with `#F2EEE5` text on `#111214` background
-- **Login screen**: Branded with Samurai logo and Kuro theme
-- **Cursor**: Samurai-themed cursor with crimson accent
+- **Login screen**: Branded with Samurai logo and Kuro theme (planned)
+- **Cursor**: Samurai-themed cursor with crimson accent (planned)
 
 ### Configuration
 ```bash
@@ -56,11 +58,11 @@ in `/usr/share/color-schemes/samurai-kuro.colors`.
 
 ### Visual Elements
 - **Japanese Samurai motifs**: same restrained aesthetic as Kuro
-- **Wallpaper**: Original Samurai-themed light wallpaper
-- **Icons**: Light Samurai icon set with vermilion accents
+- **Wallpaper**: `shiro.jpg` - an ink-wash landscape with a vermilion sun on rice paper
+- **Icons**: Light Samurai icon set with vermilion accents (planned)
 - **Terminal colors**: Shiro scheme with `#242321` text on `#F5F0E6` background
-- **Login screen**: Branded with Samurai logo and Shiro theme
-- **Cursor**: Samurai-themed cursor with vermilion accent
+- **Login screen**: Branded with Samurai logo and Shiro theme (planned)
+- **Cursor**: Samurai-themed cursor with vermilion accent (planned)
 
 ### Configuration
 ```bash
@@ -74,6 +76,30 @@ samurai-theme set shiro
 The scheme is installed as `~/.local/share/color-schemes/samurai-shiro.colors`
 and activated with `plasma-apply-colorscheme samurai-shiro`.
 
+## Wallpapers
+
+The image ships 22 wallpapers in `/usr/share/backgrounds/samurai/`, generated
+from the Samurai art collection with `build/make-wallpapers.py`:
+
+- `kuro.jpg` and `shiro.jpg` are the theme defaults. `samurai-theme` applies
+  the one matching the selected theme with `plasma-apply-wallpaperimage`, and
+  the Plasma autostart entry runs `samurai-theme default` on first login, so the
+  live session and freshly installed systems both start with Kuro colors and
+  the moonlit wallpaper.
+- Portrait sources are placed, fit to full height, over a blurred copy of
+  themselves; landscape sources are scaled and centre-cropped to 1920x1080, so
+  nothing is distorted.
+- The other 20 wallpapers (`crimson-moon.jpg`, `moonlit-tree.jpg`, ...) are
+  available in the Plasma wallpaper picker.
+
+Regenerate after changing the source art (requires Pillow):
+
+```bash
+python3 build/make-wallpapers.py
+```
+
+The generated files are committed, so ISO builds do not need Pillow.
+
 ## Theme Selector
 - **Persistent theme selector** in System Settings -> Appearance
 - **CLI selector** - `samurai-theme kuro|shiro|list|status`
@@ -84,9 +110,10 @@ and activated with `plasma-apply-colorscheme samurai-shiro`.
 - **Application behavior** - still needs testing against real KDE applications
 
 ## Installation Artwork
-- **Original wallpapers** - Japanese Samurai motifs
+- **Wallpapers** - 22 Samurai wallpapers shipped in the ISO (see above)
 - **Logos** - Samurai crest with Japanese calligraphy elements
-- **Icons** - Consistent design language across themes
+- **Icons** - Consistent design language across themes (icon set pending)
 - **Terminal colors** - Both Kuro and Shiro schemes
-- **Login branding** - Samurai logo at login screen
-- **Installer artwork** - Branded installer with theme preview
+- **Login branding** - Samurai logo at login screen (pending)
+- **Installer artwork** - Calamares uses the Samurai branding component with a
+  branded welcome slide (`/etc/calamares/branding/samurai/slide1.png`)

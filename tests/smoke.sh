@@ -144,10 +144,25 @@ for splash in \
     "$REPO_ROOT/build/config/includes.chroot/usr/share/samurai/boot/grub-splash.png"; do
     assert_file "$splash"
 done
+
+# 5d. Wallpapers and the theme manager that applies them
+wallpaper_dir="$REPO_ROOT/build/config/includes.chroot/usr/share/backgrounds/samurai"
+assert_file "$wallpaper_dir/kuro.jpg"
+assert_file "$wallpaper_dir/shiro.jpg"
+wallpaper_count=$(find "$wallpaper_dir" -type f -name '*.jpg' | wc -l)
+(( wallpaper_count >= 20 )) || fail "expected at least 20 wallpapers, found $wallpaper_count"
+assert_file "$REPO_ROOT/build/make-wallpapers.py"
+grep -q 'plasma-apply-wallpaperimage' "$REPO_ROOT/samurai/scripts/samurai-theme" \
+    || fail "samurai-theme does not apply the theme wallpaper"
+grep -q 'install -d -m 0755 /boot/grub' \
+    "$REPO_ROOT/build/config/hooks/normal/0110-branding.hook.chroot" \
+    || fail "the chroot branding hook does not create /boot/grub for the installer"
 grep -q 'Samurai Linux 2026' "$REPO_ROOT/build/config/hooks/normal/0200-branding.hook.binary" \
     || fail "the binary branding hook does not rename the boot menu"
 grep -q 'GRUB_BACKGROUND' "$REPO_ROOT/build/config/hooks/normal/0110-branding.hook.chroot" \
     || fail "the chroot branding hook does not set the GRUB background"
+grep -q 'usr/share/backgrounds/samurai' "$REPO_ROOT/build/verify-iso.sh" \
+    || fail "ISO verification does not check the desktop wallpapers"
 grep -q 'os-release' "$REPO_ROOT/build/verify-iso.sh" \
     || fail "ISO verification does not check distribution branding"
 assert_file "$REPO_ROOT/build/install-test.py"

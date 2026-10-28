@@ -8,3 +8,9 @@ samurai/scripts/* text eol=lf
 *.colors text eol=lf
 *.md text eol=lf
 *.yml text eol=lf
+
+# Binary assets (wallpapers, splashes, installer art).
+*.jpg binary
+*.jpeg binary
+*.jfif binary
+*.png binary

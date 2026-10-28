@@ -110,6 +110,7 @@ unsquashfs -f -no-progress -d "$ROOT" "$SQUASHFS" \
     etc/calamares/branding/samurai/productIcon.png \
     etc/calamares/branding/samurai/productWelcome.png \
     etc/calamares/branding/samurai/show.qml \
+    etc/calamares/branding/samurai/slide1.png \
     usr/bin/calamares \
     usr/bin/calamares-install-debian \
     usr/bin/unsquashfs \
@@ -120,6 +121,8 @@ unsquashfs -f -no-progress -d "$ROOT" "$SQUASHFS" \
     usr/share/color-schemes/samurai-kuro.colors \
     usr/share/color-schemes/samurai-shiro.colors \
     usr/share/applications/calamares-install-debian.desktop \
+    usr/share/backgrounds/samurai/kuro.jpg \
+    usr/share/backgrounds/samurai/shiro.jpg \
     usr/share/samurai/boot/grub-splash.png \
     usr/share/pixmaps/samurai-linux.png \
     usr/lib/grub/i386-pc/normal.mod \
@@ -138,6 +141,7 @@ assert_file etc/calamares/branding/samurai/productLogo.png
 assert_file etc/calamares/branding/samurai/productIcon.png
 assert_file etc/calamares/branding/samurai/productWelcome.png
 assert_file etc/calamares/branding/samurai/show.qml
+assert_file etc/calamares/branding/samurai/slide1.png
 assert_file usr/bin/calamares
 assert_file usr/bin/calamares-install-debian
 assert_file usr/bin/unsquashfs
@@ -148,6 +152,8 @@ assert_file usr/local/bin/samurai-gaming
 assert_file usr/share/color-schemes/samurai-kuro.colors
 assert_file usr/share/color-schemes/samurai-shiro.colors
 assert_file usr/share/applications/calamares-install-debian.desktop
+assert_file usr/share/backgrounds/samurai/kuro.jpg
+assert_file usr/share/backgrounds/samurai/shiro.jpg
 assert_file usr/share/samurai/boot/grub-splash.png
 assert_file usr/share/pixmaps/samurai-linux.png
 assert_file usr/lib/grub/i386-pc/normal.mod
@@ -187,6 +193,20 @@ assert_contains etc/default/grub 'console=ttyS0,115200n8'
 cmp -s "$ROOT/usr/share/samurai/boot/grub-splash.png" \
     "$REPO_ROOT/build/config/includes.chroot/usr/share/samurai/boot/grub-splash.png" \
     || die "the installed GRUB splash is not the Samurai splash"
+
+log "Checking desktop wallpapers"
+for wallpaper in kuro.jpg shiro.jpg; do
+    cmp -s "$ROOT/usr/share/backgrounds/samurai/$wallpaper" \
+        "$REPO_ROOT/build/config/includes.chroot/usr/share/backgrounds/samurai/$wallpaper" \
+        || die "/usr/share/backgrounds/samurai/$wallpaper is not the Samurai wallpaper"
+done
+
+log "Checking that the live rootfs can run update-grub"
+# Calamares' calamares-bootloader-config helper ends with update-grub, which
+# writes /boot/grub/grub.cfg. The live image never installs GRUB to a disk, so
+# the directory has to ship in the image or the installer fails offline.
+unsquashfs -l "$SQUASHFS" boot/grub >/dev/null 2>&1 \
+    || die "the live rootfs has no /boot/grub; Calamares could not write grub.cfg"
 
 log "Checking installed packages needed by the installer"
 assert_contains var/lib/dpkg/status '^Package: calamares$'
