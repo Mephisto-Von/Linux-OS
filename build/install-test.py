@@ -286,7 +286,10 @@ class VNC:
 
     def click(self, x: int, y: int) -> None:
         self.log(f"vnc: click {x},{y}")
-        self._run("move", str(x), str(y), "click", "1")
+        # QEMU's PS/2 pointer is relative; with usb-tablet the move is
+        # absolute. The pause also lets X update the pointer before the
+        # button event, which otherwise lands at the previous position.
+        self._run("move", str(x), str(y), "pause", "0.3", "click", "1")
 
     def capture(self, name: str) -> Path:
         self._captures += 1
@@ -431,6 +434,9 @@ class InstallerTest:
             f"vnc=127.0.0.1:{self.vnc_display}",
             "-vga",
             "std",
+            "-usb",
+            "-device",
+            "usb-tablet",
             "-monitor",
             "none",
             "-no-reboot",
@@ -590,7 +596,15 @@ class InstallerTest:
     def advance(self, needle: str, label: str, timeout: float, screenshot: str) -> None:
         if not self.click_word("next"):
             self.vnc.key("alt-n")
-        self.wait_for(needle, label, timeout, screenshot)
+        try:
+            # The first click on an unfocused window can be consumed by the
+            # focus policy. Retry once before failing the page transition.
+            self.wait_for(needle, label, 15, screenshot)
+        except Failure:
+            self.log(f"{label} did not appear; clicking Next again")
+            if not self.click_word("next"):
+                self.vnc.key("alt-n")
+            self.wait_for(needle, label, timeout, screenshot)
 
     # -- install flow --------------------------------------------------
 
@@ -679,7 +693,7 @@ class InstallerTest:
             "01-welcome",
             dismiss_welcome=True,
         )
-        self.advance("region:", "Calamares locale page", 90, "02-locale")
+        self.advance("region", "Calamares locale page", 90, "02-locale")
         self.advance("layout", "Calamares keyboard page", 90, "03-keyboard")
         self.advance("erase disk", "Calamares partition page", 120, "04-partition")
         self.advance("what is your name", "Calamares users page", 120, "05-users")

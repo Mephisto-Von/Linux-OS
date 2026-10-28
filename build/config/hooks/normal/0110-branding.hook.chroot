@@ -56,7 +56,27 @@ fi
 
 # Brand the installed system's GRUB and keep a serial console available for
 # headless installs and automated tests.
+#
+# The live image installs grub-*-bin (for Calamares) but not the grub-pc or
+# grub-efi-amd64 platform packages whose postinst creates /etc/default/grub.
+# Calamares' grubcfg module and update-grub need that file, so seed it from
+# grub2-common's template when it is absent.
 grub_default=/etc/default/grub
+if [ ! -f "$grub_default" ]; then
+    install -d -m 0755 /etc/default
+    if [ -f /usr/share/grub/default/grub ]; then
+        cp /usr/share/grub/default/grub "$grub_default"
+    else
+        cat > "$grub_default" <<'EOF'
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=5
+GRUB_DISTRIBUTOR="Samurai Linux"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX=""
+EOF
+    fi
+fi
+
 if [ -f "$grub_default" ]; then
     if grep -q '^GRUB_DISTRIBUTOR=' "$grub_default"; then
         sed -i 's|^GRUB_DISTRIBUTOR=.*|GRUB_DISTRIBUTOR="Samurai Linux"|' "$grub_default"
