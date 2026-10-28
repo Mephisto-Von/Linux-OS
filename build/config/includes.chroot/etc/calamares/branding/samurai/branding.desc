@@ -9,10 +9,10 @@ windowPlacement: center
 strings:
     productName:         Samurai Linux
     shortProductName:    Samurai
-    version:             2026.10
-    shortVersion:        2026.10
-    versionedName:       Samurai Linux 2026.10
-    shortVersionedName:  Samurai 2026.10
+    version:             2026.10.29
+    shortVersion:        2026.10.29
+    versionedName:       Samurai Linux 2026.10.29
+    shortVersionedName:  Samurai 2026.10.29
     bootloaderEntryName: Samurai Linux
     productUrl:          https://github.com/Mephisto-Von/Linux-OS
     supportUrl:          https://github.com/Mephisto-Von/Linux-OS/issues

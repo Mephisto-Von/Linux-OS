@@ -17,7 +17,7 @@ for pair in "isolinux/splash.png:../config/bootloaders/isolinux/splash.png" \
 done
 
 if [ -f isolinux/menu.cfg ]; then
-    sed -i -E 's/^menu title[[:space:]].*/menu title Samurai Linux 2026.10/' isolinux/menu.cfg
+    sed -i -E 's/^menu title[[:space:]].*/menu title Samurai Linux 2026.10.29/' isolinux/menu.cfg
 fi
 
 if [ -f isolinux/stdmenu.cfg ]; then
