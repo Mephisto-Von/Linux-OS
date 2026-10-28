@@ -752,7 +752,7 @@ class InstallerTest:
             time.sleep(20)
             image = self.vnc.stable_capture(f"07-progress-{attempt:02d}.png")
             text = re.sub(r"\s+", " ", self.ocr_text(image).lower())
-            if any(x in text for x in ["all done", "installation complete", "install complete", "installation finished", "finished", "done", "reboot", "restart now", "continue", "thank you"]):
+            if any(x in text for x in ["all done", "installation complete", "install complete", "installation finished", "finished", "done", "reboot", "restart now", "continue", "thank you", "have fun", "enjoy", "quit"]):
                 self.vnc.capture("08-finished.png")
                 self.log(f"Calamares reached the finished page: {text[-100:]}")
                 return
