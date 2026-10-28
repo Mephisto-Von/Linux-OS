@@ -549,14 +549,16 @@ class InstallerTest:
 
     def wait_for(
         self,
-        needle: str,
+        needles: str | tuple[str, ...],
         label: str,
         timeout: float,
         screenshot: str,
         *,
         dismiss_welcome: bool = False,
     ) -> Path:
-        needle_l = needle.lower()
+        if isinstance(needles, str):
+            needles = (needles,)
+        needles = tuple(needle.lower() for needle in needles)
         deadline = time.time() + timeout
         last_text = ""
         attempt = 0
@@ -568,7 +570,8 @@ class InstallerTest:
             text = self.ocr_text(image)
             last_text = text
             normalized = re.sub(r"\s+", " ", text.lower())
-            if needle_l in normalized:
+            self.log(f"OCR {label} attempt {attempt}: {normalized[:200]!r}")
+            if any(needle in normalized for needle in needles):
                 self.log(f"detected {label!r}")
                 return self.vnc.stable_capture(f"{screenshot}.png")
             if "installation failed" in normalized or "installer failed" in normalized:
@@ -576,7 +579,7 @@ class InstallerTest:
             time.sleep(4)
         self.vnc.capture(f"{screenshot}-timeout.png")
         raise Failure(
-            f"timed out waiting for {label!r}; last OCR text:\n{last_text[-3000:]}"
+            f"timed out waiting for {label} {needles!r}; last OCR text:\n{last_text[-3000:]}"
         )
 
     def click_word(self, word: str) -> bool:
@@ -593,7 +596,13 @@ class InstallerTest:
         self.vnc.click(x, y)
         return True
 
-    def advance(self, needle: str, label: str, timeout: float, screenshot: str) -> None:
+    def advance(
+        self,
+        needle: str | tuple[str, ...],
+        label: str,
+        timeout: float,
+        screenshot: str,
+    ) -> None:
         if not self.click_word("next"):
             self.vnc.key("alt-n")
         try:
@@ -693,10 +702,25 @@ class InstallerTest:
             "01-welcome",
             dismiss_welcome=True,
         )
-        self.advance("region", "Calamares locale page", 90, "02-locale")
-        self.advance("layout", "Calamares keyboard page", 90, "03-keyboard")
+        self.advance(
+            ("system language", "zone:", "region"),
+            "Calamares locale page",
+            90,
+            "02-locale",
+        )
+        self.advance(
+            ("keyboard model", "test your keyboard"),
+            "Calamares keyboard page",
+            90,
+            "03-keyboard",
+        )
         self.advance("erase disk", "Calamares partition page", 120, "04-partition")
-        self.advance("what is your name", "Calamares users page", 120, "05-users")
+        self.advance(
+            ("what is your name", "login name", "computer name"),
+            "Calamares users page",
+            120,
+            "05-users",
+        )
 
         # UsersViewStep focuses the full-name field on activation. The tab
         # order is full name -> login name -> computer name -> password ->
