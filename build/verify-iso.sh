@@ -151,6 +151,7 @@ assert_file etc/calamares/branding/samurai/productIcon.png
 assert_file etc/calamares/branding/samurai/productWelcome.png
 assert_file etc/calamares/branding/samurai/show.qml
 assert_file etc/calamares/branding/samurai/slide1.png
+assert_file etc/calamares/modules/packages.conf
 assert_file usr/bin/calamares
 assert_file usr/bin/calamares-install-debian
 assert_file usr/bin/unsquashfs
@@ -183,6 +184,22 @@ assert_contains usr/share/applications/calamares-install-debian.desktop \
     '^Name=Install Samurai Linux$'
 assert_contains usr/share/applications/calamares-install-debian.desktop \
     '^Exec=calamares-install-debian$'
+
+# An apt-get remove of a package that is not installed exits 100 and aborts the
+# whole install, so every live package we purge unconditionally must be present
+# in the image and the speculative entries must sit under try_remove.
+log "Checking Calamares package operations"
+assert_contains etc/calamares/modules/packages.conf '^backend:[[:space:]]*apt$'
+assert_contains etc/calamares/modules/packages.conf '^  - remove:$'
+assert_contains etc/calamares/modules/packages.conf '^      - live-boot$'
+assert_contains etc/calamares/modules/packages.conf '^      - calamares-settings-debian$'
+assert_contains etc/calamares/modules/packages.conf '^  - try_remove:$'
+assert_contains etc/calamares/modules/packages.conf \
+    '^      - live-task-localisation$'
+assert_contains var/lib/dpkg/status '^Package: live-boot$'
+assert_contains var/lib/dpkg/status '^Package: live-config$'
+assert_contains var/lib/dpkg/status '^Package: live-config-systemd$'
+assert_contains var/lib/dpkg/status '^Package: live-tools$'
 
 log "Checking distribution branding"
 assert_contains etc/os-release '^NAME="Samurai Linux"$'

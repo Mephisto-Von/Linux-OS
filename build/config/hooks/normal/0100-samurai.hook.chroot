@@ -33,3 +33,29 @@ sed -i \
     "$desktop"
 install -Dm0644 /etc/calamares/branding/samurai/productIcon.png \
     /usr/share/icons/hicolor/128x128/apps/samurai-install.png
+
+# Debian's stock packages.conf purges live-boot-doc, live-config-doc,
+# live-task-localisation and live-task-recommended in one apt-get command. Those
+# four are not installed in this image, and apt aborts the whole transaction with
+# exit code 100 when it cannot locate a package, so the installer died with
+# "Package Manager error" at the packages job. Remove only the packages we
+# actually install, and keep the speculative ones under try_remove so a missing
+# package can never fail an installation again.
+install -d -m 0755 /etc/calamares/modules
+cat > /etc/calamares/modules/packages.conf <<'EOF'
+---
+backend: apt
+
+operations:
+  - remove:
+      - live-boot
+      - live-config
+      - live-config-systemd
+      - live-tools
+      - calamares-settings-debian
+  - try_remove:
+      - live-boot-doc
+      - live-config-doc
+      - live-task-localisation
+      - live-task-recommended
+EOF
