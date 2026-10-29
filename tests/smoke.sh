@@ -157,6 +157,9 @@ grep -q 'plasma-apply-wallpaperimage' "$REPO_ROOT/samurai/scripts/samurai-theme"
 grep -q 'install -d -m 0755 /boot/grub' \
     "$REPO_ROOT/build/config/hooks/normal/0110-branding.hook.chroot" \
     || fail "the chroot branding hook does not create /boot/grub for the installer"
+# The single quotes are intentional: this matches the literal text the hook
+# writes into isolinux.cfg, not a value expanded here.
+# shellcheck disable=SC2016
 grep -q 'menu title Samurai Linux \${menu_version}' \
     "$REPO_ROOT/build/config/hooks/normal/0200-branding.hook.binary" \
     || fail "the binary branding hook does not rename the boot menu with the build date"
