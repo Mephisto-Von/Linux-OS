@@ -120,6 +120,7 @@ unsquashfs -f -no-progress -d "$ROOT" "$SQUASHFS" \
     etc/calamares/branding/samurai/productWelcome.png \
     etc/calamares/branding/samurai/show.qml \
     etc/calamares/branding/samurai/slide1.png \
+    etc/calamares/modules/packages.conf \
     usr/bin/calamares \
     usr/bin/calamares-install-debian \
     usr/bin/unsquashfs \
