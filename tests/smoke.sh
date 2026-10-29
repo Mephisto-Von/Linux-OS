@@ -157,8 +157,11 @@ grep -q 'plasma-apply-wallpaperimage' "$REPO_ROOT/samurai/scripts/samurai-theme"
 grep -q 'install -d -m 0755 /boot/grub' \
     "$REPO_ROOT/build/config/hooks/normal/0110-branding.hook.chroot" \
     || fail "the chroot branding hook does not create /boot/grub for the installer"
-grep -q 'Samurai Linux 2026' "$REPO_ROOT/build/config/hooks/normal/0200-branding.hook.binary" \
-    || fail "the binary branding hook does not rename the boot menu"
+grep -q 'menu title Samurai Linux \${menu_version}' \
+    "$REPO_ROOT/build/config/hooks/normal/0200-branding.hook.binary" \
+    || fail "the binary branding hook does not rename the boot menu with the build date"
+grep -q 'date -u +%Y.%m.%d' "$REPO_ROOT/build/config/hooks/normal/0200-branding.hook.binary" \
+    || fail "the boot menu title is not derived from the build date"
 grep -q 'GRUB_BACKGROUND' "$REPO_ROOT/build/config/hooks/normal/0110-branding.hook.chroot" \
     || fail "the chroot branding hook does not set the GRUB background"
 grep -q 'usr/share/backgrounds/samurai' "$REPO_ROOT/build/verify-iso.sh" \

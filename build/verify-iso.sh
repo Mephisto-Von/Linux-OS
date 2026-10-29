@@ -89,7 +89,16 @@ grep -q 'console=ttyS0,115200n8' "$TMP_DIR/grub.cfg" \
     || die "/boot/grub/grub.cfg does not pass console=ttyS0,115200n8"
 
 log "Checking Samurai bootloader branding"
-assert_file_contains "$TMP_DIR/menu.cfg" '^menu title Samurai Linux 2026\.10$'
+# The menu title carries the build date (YYYY.MM.DD) and the ISO file is named
+# after the same date, so a stale hardcoded title cannot slip through.
+ISO_DATE=""
+if [[ $(basename "$ISO") =~ samurai-linux-([0-9]{4}\.[0-9]{2}\.[0-9]{2})-amd64\.iso$ ]]; then
+    ISO_DATE="${BASH_REMATCH[1]}"
+fi
+if [[ -n "$ISO_DATE" ]]; then
+    assert_file_contains "$TMP_DIR/menu.cfg" "^menu title Samurai Linux ${ISO_DATE//./\\.}$"
+fi
+assert_file_contains "$TMP_DIR/menu.cfg" '^menu title Samurai Linux [0-9]{4}\.[0-9]{2}\.[0-9]{2}$'
 assert_file_contains "$TMP_DIR/live.cfg" 'Samurai Linux Live'
 assert_file_contains "$TMP_DIR/grub.cfg" 'Samurai Linux Live'
 assert_file_contains "$TMP_DIR/stdmenu.cfg" '#b52832ff'

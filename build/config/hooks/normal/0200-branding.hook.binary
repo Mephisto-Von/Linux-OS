@@ -17,7 +17,12 @@ for pair in "isolinux/splash.png:../config/bootloaders/isolinux/splash.png" \
 done
 
 if [ -f isolinux/menu.cfg ]; then
-    sed -i -E 's/^menu title[[:space:]].*/menu title Samurai Linux 2026.10.29/' isolinux/menu.cfg
+    # Use the build date, not a hardcoded release date: the ISO is named
+    # samurai-linux-$(date +%Y.%m.%d)-amd64.iso, so the menu stays in step with
+    # the image it is baked into. verify-iso.sh compares the two.
+    menu_version=$(date -u +%Y.%m.%d)
+    sed -i -E "s/^menu title[[:space:]].*/menu title Samurai Linux ${menu_version}/" \
+        isolinux/menu.cfg
 fi
 
 if [ -f isolinux/stdmenu.cfg ]; then
