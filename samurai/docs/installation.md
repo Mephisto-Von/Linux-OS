@@ -42,9 +42,10 @@ bootloader if you need Secure Boot.
 
 ## Live Session
 
-1. Boot the USB drive and choose **Live system (amd64)** in the boot menu (it
-   auto-selects after 5 seconds). The bootloader splash and text console still
-   use Debian's default branding; Calamares and the desktop use Samurai branding.
+1. Boot the USB drive and choose **Samurai Linux Live (amd64)** in the boot
+   menu (it auto-selects after 5 seconds). The menu title, entry labels and
+   isolinux/GRUB splashes are Samurai artwork; the boot logo is still Debian's
+   because the live kernel/initramfs come from Debian's `live-boot` package.
 2. The live session logs in as `samurai` (password `live` if asked). `sudo` is
    passwordless in the live session.
 3. Connect to the network from the Plasma system tray if you want to install
@@ -122,14 +123,15 @@ guidance.
   `40346119925`), but the full interactive installation is not yet automated. A
   scripted QEMU install to a virtual disk is still future work, so partitioning,
   bootloader installation, and first boot on real hardware remain unverified.
-- The bootloader splash and live text console still show Debian branding;
+- The bootloader splash and menus use Samurai artwork; the kernel boot logo and
+  the installed system's GRUB menu labels still come from Debian's packages.
   Calamares and the desktop use Samurai branding.
 - There is no Samurai first-boot wizard and no `samurai-install` command.
 - The installed system's bootloader is not Secure Boot signed.
 - There is no signed APT repository; the installed system uses Debian's
   repositories plus the packages copied from the live image.
-- Wallpapers, icons, and cursors are not yet packaged as a complete Samurai
-  theme.
+- Wallpapers and color schemes ship with the image; icon sets and cursors are
+  not yet packaged as a complete Samurai theme.
 
 ## Recovery
 

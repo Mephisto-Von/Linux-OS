@@ -10,9 +10,10 @@
   `40346119925`). No automated test clicks through Calamares to install to a
   virtual disk, so partitioning, bootloader installation, and first boot on real
   hardware should be treated as unverified.
-- **Bootloader and console branding remains Debian** - the isolinux/GRUB splash
-  and the live `/etc/issue` use Debian's defaults. Calamares and the desktop use
-  Samurai branding.
+- **Boot menu and splash are Samurai, the kernel boot logo is not** - the
+  isolinux and GRUB menus use the Samurai title, entry labels, selection colour
+  and splash images, but the Debian logo drawn by the live kernel and the GRUB
+  labels on an installed system still come from Debian's packages.
 - **No first-boot wizard** - the installed system boots to SDDM; theme, AI, and
   gaming setup are manual commands after login.
 - **Installed system is not Secure Boot signed** - the live ISO uses Debian's
@@ -39,8 +40,9 @@
   enabled by default
 
 ## Desktop and Themes
-- **Samurai icon set and wallpapers pending** - theme color schemes are
-  complete; the full custom icon set, cursors, and original artwork are planned
+- **Icons and cursors are pending** - the Kuro/Shiro color schemes and 22
+  Samurai wallpapers ship with the image, but the custom icon set and cursors
+  are still planned
 - **Plasma Wayland quirks** - some gaming overlays (MangoHUD) work best on X11
   sessions currently
 

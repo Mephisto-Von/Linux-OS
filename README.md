@@ -7,7 +7,8 @@ cybersecurity, gaming, daily desktop productivity, privacy, and high performance
 - **Desktop**: KDE Plasma
 - **Themes**: Kuro (Dark, `#111214`) and Shiro (Light, `#F5F0E6`) KDE color
   schemes, with a Japanese Samurai-inspired palette (crimson and gold accents).
-  Wallpapers, icons, and cursors are planned.
+  22 Samurai wallpapers (1920x1080) are installed system-wide; icons and
+  cursors are still planned.
 
 ## Repository Layout
 
@@ -112,7 +113,7 @@ armored detached `.sig` when signing is enabled.
 | Component | Status |
 |---|---|
 | Architecture & design documentation | ✅ Complete (aspirational in places) |
-| Kuro / Shiro KDE `.colors` schemes | ✅ Implemented; wallpapers/icons/cursors pending |
+| Kuro / Shiro KDE `.colors` schemes | ✅ Implemented; 22 wallpapers shipped; icons/cursors pending |
 | `samurai-ai` CLI | ✅ Implemented, smoke-tested |
 | `samurai-theme` CLI | ✅ Applies real KDE color schemes |
 | `samurai-gaming` CLI | ✅ Fixed for Debian (Steam via `steam-installer`) |
