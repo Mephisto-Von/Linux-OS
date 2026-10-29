@@ -78,13 +78,33 @@ jobs:
           echo "Using ISO artifact from run $run_id"
           echo "ISO_RUN_ID=$run_id" >> "$GITHUB_ENV"
 
+      # Do not use actions/download-artifact with run-id here: the API responds
+      # with a 301 to the repository's current name after a rename, and the
+      # action treats that as a hard failure. curl follows the redirect.
       - name: Download ISO artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: samurai-linux-iso
-          path: dist
-          run-id: ${{ env.ISO_RUN_ID }}
-          github-token: ${{ github.token }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          artifact_id=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${ISO_RUN_ID}/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name == "samurai-linux-iso") | .id' | head -n 1)
+          if [[ -z "$artifact_id" ]]; then
+            echo "Run $ISO_RUN_ID has no samurai-linux-iso artifact" >&2
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ISO_RUN_ID}/artifacts" \
+              --jq '.artifacts[].name' >&2 || true
+            exit 1
+          fi
+          echo "Downloading artifact $artifact_id from run $ISO_RUN_ID"
+          curl -fsSL --retry 3 --retry-delay 5 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -o dist/samurai-linux-iso.zip \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip"
+          unzip -q -o dist/samurai-linux-iso.zip -d dist
+          rm -f dist/samurai-linux-iso.zip
+          find dist -maxdepth 2 -name '*.iso' -print
 
       - name: Install QEMU, OCR, and VNC tooling
         run: |
