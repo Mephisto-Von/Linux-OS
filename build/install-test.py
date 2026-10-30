@@ -24,6 +24,7 @@ import re
 import shlex
 import shutil
 import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -582,11 +583,27 @@ class InstallerTest:
             f"timed out waiting for {label} {needles!r}; last OCR text:\n{last_text[-3000:]}"
         )
 
+    @staticmethod
+    def png_size(path: Path) -> tuple[int, int]:
+        head = path.read_bytes()[:33]
+        if head[:8] != b"\x89PNG\r\n\x1a\n":
+            raise Failure(f"{path} is not a screenshot")
+        return struct.unpack(">II", head[16:24])
+
     def click_word(self, word: str) -> bool:
-        """Click the lowest matching word (buttons live below page content)."""
+        """Click a matching word in the bottom button row.
+
+        Only the last 12% of the screen is considered: the page body also
+        contains words like "Next" and "Install", and clicking one of those
+        left the installer sitting on the same page.
+        """
         image = self.vnc.stable_capture("lookup.png")
+        _, height = self.png_size(image)
+        band = height * 0.88
         matches = [
-            item for item in self.ocr.words(image) if word.lower() in item["text"].lower()
+            item
+            for item in self.ocr.words(image)
+            if word.lower() in item["text"].lower() and item["top"] >= band
         ]
         if not matches:
             return False
@@ -595,6 +612,19 @@ class InstallerTest:
         y = target["top"] + target["height"] // 2
         self.vnc.click(x, y)
         return True
+
+    def click_primary_button(self) -> None:
+        """Click Calamares' bottom-right primary button by geometry.
+       
+        Used only when the keyboard accelerator has no effect; OCR often
+        cannot read the Qt button labels at all.
+        """
+        image = self.vnc.capture("primary-button.png")
+        width, height = self.png_size(image)
+        x = int(width * 0.7875)
+        y = height - 80
+        self.log(f"clicking the primary button at {x},{y} (screen {width}x{height})")
+        self.vnc.click(x, y)
 
     def advance(
         self,
@@ -608,6 +638,55 @@ class InstallerTest:
         if not self.click_word("next"):
             self.vnc.key("alt-n")
         self.wait_for(needle, label, timeout, screenshot)
+
+    def calamares_log_size(self) -> int:
+        assert self.serial
+        output = self.serial.command(
+            "stat -c %s /root/.cache/calamares/session.log 2>/dev/null || echo 0",
+            timeout=30,
+            check=False,
+        )
+        for line in output.splitlines():
+            if line.strip().isdigit():
+                return int(line.strip())
+        return 0
+
+    def start_install(self) -> None:
+        """Start the install without guessing the Install button by OCR.
+
+        The summary body contains the words "Install Samurai on ...", so an
+        OCR click landed on that sentence and the installer sat on the summary
+        page for the whole timeout. The button carries the standard Alt+I
+        accelerator; a geometry click is the fallback. Either way, the install
+        only counts as started once Calamares actually runs its jobs.
+        """
+        baseline = self.calamares_log_size()
+        self.log(f"Calamares session log is {baseline} bytes before starting")
+        attempts: list[tuple[str, object]] = [
+            ("the Alt+I accelerator", lambda: self.vnc.key("alt-i")),
+            ("the Alt+I accelerator again", lambda: self.vnc.key("alt-i")),
+            ("a click on the primary button", self.click_primary_button),
+            ("the Alt+I accelerator", lambda: self.vnc.key("alt-i")),
+        ]
+        for label, action in attempts:
+            self.log(f"starting the install with {label}")
+            assert callable(action)
+            action()
+            deadline = time.time() + 45
+            while time.time() < deadline:
+                time.sleep(5)
+                size = self.calamares_log_size()
+                if size > baseline + 512:
+                    self.log(
+                        "Calamares is installing: the session log grew from "
+                        f"{baseline} to {size} bytes"
+                    )
+                    return
+        self.vnc.capture("06-install-not-started.png")
+        raise Failure(
+            "Calamares stayed on the summary page after the Alt+I accelerator "
+            "and a click on the primary button (see 06-install-not-started.png)"
+        )
 
     # -- install flow --------------------------------------------------
 
@@ -739,8 +818,7 @@ class InstallerTest:
         self.vnc.capture("05-users-filled.png")
         self.advance("overview", "Calamares summary page", 120, "06-summary")
 
-        if not self.click_word("install"):
-            self.vnc.key("alt-i")
+        self.start_install()
 
         # The exec page has no stable text other than the progress bar. Wait
         # for the finished page; poll the serial log so a stuck job is visible.
@@ -752,11 +830,23 @@ class InstallerTest:
             time.sleep(20)
             image = self.vnc.stable_capture(f"07-progress-{attempt:02d}.png")
             text = re.sub(r"\s+", " ", self.ocr_text(image).lower())
-            if any(x in text for x in ["all done", "installation complete", "install complete", "installation finished", "finished", "done", "reboot", "restart now", "continue", "thank you", "have fun", "enjoy", "quit"]):
+            if any(
+                x in text
+                for x in [
+                    "all done",
+                    "installation complete",
+                    "installation finished",
+                    "install complete",
+                    "install finished",
+                    "your new system",
+                    "restart now",
+                    "reboot now",
+                ]
+            ):
                 self.vnc.capture("08-finished.png")
                 self.log(f"Calamares reached the finished page: {text[-100:]}")
                 return
-            if "installation failed" in text or "installer failed" in text or "error" in text and "failed" in text:
+            if "installation failed" in text or "installer failed" in text:
                 self.vnc.capture("08-failure.png")
                 raise Failure(f"Calamares reported a failure on the finished page; see {image}")
             try:
@@ -1018,7 +1108,7 @@ def main() -> int:
         help="directory for the disk, logs, and screenshots",
     )
     parser.add_argument("--disk-size", default="20G", help="size of the blank target disk")
-    parser.add_argument("--timeout", type=int, default=5400, help="seconds allowed for the install")
+    parser.add_argument("--timeout", type=int, default=3600, help="seconds allowed for the install")
     parser.add_argument(
         "--reboot-timeout", type=int, default=900, help="seconds allowed for the installed boot"
     )
