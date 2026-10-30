@@ -959,6 +959,9 @@ class InstallerTest:
         self.start_reboot_vm()
         assert self.serial
         self.serial.login("samurai", self.password, timeout=self.reboot_timeout)
+        # /boot/grub/grub.cfg is root-only and the first sudo call would block on
+        # a password prompt, so take a root shell up front for the whole check.
+        self.serial.root_shell(self.password, timeout=120)
 
         commands = [
             ("cat /etc/os-release", "os-release"),
@@ -968,7 +971,7 @@ class InstallerTest:
             ("stat -c '%U' /home/samurai", "home owner"),
             ("cat /proc/cmdline", "kernel command line"),
             (
-                "sudo grep -E 'Samurai Linux|console=ttyS0' /boot/grub/grub.cfg "
+                "grep -E 'Samurai Linux|console=ttyS0' /boot/grub/grub.cfg "
                 "| head -n 10",
                 "installed GRUB",
             ),
