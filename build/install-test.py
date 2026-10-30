@@ -299,6 +299,18 @@ class VNC:
         self._run("capture", str(path))
         return path
 
+    def wake(self) -> None:
+        """Nudge the pointer so an idle-blanked live desktop comes back.
+
+        The Plasma session screens out after a few minutes with no input, and
+        QEMU keeps serving the black frame, which would make every later
+        capture useless.
+        """
+        try:
+            self._run("move", "200", "200", "pause", "0.2", "move", "220", "210")
+        except Failure as exc:
+            self.log(f"could not wake the display: {exc}")
+
     def stable_capture(self, name: str, quiet: float = 0.8, attempts: int = 6) -> Path:
         """Capture until two consecutive frames are byte-identical.
 
@@ -754,6 +766,16 @@ class InstallerTest:
             check=False,
         )
         self.dismiss_welcome()
+        # A blanked desktop hides the installer from VNC (and from every
+        # screenshot kept as CI evidence), so switch X's blanking off and stop
+        # Plasma's power daemon from blanking it again.
+        self.serial.command(
+            "pkill -x powerdevil >/dev/null 2>&1 || true; "
+            "DISPLAY=:0 XAUTHORITY=/root/.Xauthority "
+            "xset s off s noblank -dpms >/dev/null 2>&1 || true",
+            timeout=30,
+            check=False,
+        )
         self.serial.background(
             "DISPLAY=:0 XAUTHORITY=/root/.Xauthority QT_AUTO_SCREEN_SCALE_FACTOR=1 "
             "calamares -d >/tmp/calamares.out 2>&1"
@@ -827,54 +849,68 @@ class InstallerTest:
         attempt = 0
         while time.time() < deadline:
             attempt += 1
-            time.sleep(20)
-            image = self.vnc.stable_capture(f"07-progress-{attempt:02d}.png")
-            text = re.sub(r"\s+", " ", self.ocr_text(image).lower())
-            if any(
-                x in text
-                for x in [
-                    "all done",
-                    "installation complete",
-                    "installation finished",
-                    "install complete",
-                    "install finished",
-                    "your new system",
-                    "restart now",
-                    "reboot now",
-                ]
-            ):
-                self.vnc.capture("08-finished.png")
-                self.log(f"Calamares reached the finished page: {text[-100:]}")
-                return
-            if "installation failed" in text or "installer failed" in text:
-                self.vnc.capture("08-failure.png")
-                raise Failure(f"Calamares reported a failure on the finished page; see {image}")
+            time.sleep(15)
+            # The session log is the authoritative completion signal: the
+            # Finished module logs "completion: succeeded" exactly once, after
+            # the last job and the final umount have completed. OCR is only a
+            # hint here because the live desktop can blank its display.
+            state = ""
             try:
                 assert self.serial
-                tail = self.serial.command(
-                    "tail -n 40 /root/.cache/calamares/session.log 2>/dev/null || true",
-                    timeout=30,
+                state = self.serial.command(
+                    "log=/root/.cache/calamares/session.log; "
+                    "if grep -q 'completion: succeeded' \"$log\" 2>/dev/null; then "
+                    "echo SAMURAI_INSTALL_DONE; "
+                    "elif grep -qE 'Installation failed|External command finished with errors' "
+                    "\"$log\" 2>/dev/null; then echo SAMURAI_INSTALL_FAILED; "
+                    "else echo SAMURAI_INSTALL_RUNNING; fi",
+                    timeout=90,
                     check=False,
                 )
-                if tail:
-                    self.log("calamares: " + " | ".join(tail.splitlines()[-3:]))
-                # Calamares writes the failure to its session log long before
-                # any dialog is legible; grep the log so a failed job is
-                # reported immediately instead of at the end of the timeout.
-                if re.search(
-                    r"Installation failed|External command finished with errors",
-                    tail,
-                    re.I,
-                ):
-                    self.vnc.capture("08-failure.png")
-                    raise Failure(
-                        "Calamares reported an installation failure; session log tail:\n"
-                        + "\n".join(tail.splitlines()[-40:])
-                    )
             except Failure as exc:
-                if "Calamares reported an installation failure" in str(exc):
-                    raise
-                self.log(f"could not poll the Calamares log: {exc}")
+                self.log(f"could not read the Calamares state: {exc}")
+            state = state.strip()
+            if state:
+                self.log(f"calamares state: {state} (poll {attempt})")
+            if "SAMURAI_INSTALL_DONE" in state:
+                self.vnc.wake()
+                self.vnc.capture("08-finished.png")
+                self.log("Calamares reported completion: succeeded")
+                return
+            if "SAMURAI_INSTALL_FAILED" in state:
+                self.vnc.wake()
+                self.vnc.capture("08-failure.png")
+                tail = self.serial.command(
+                    "tail -n 40 /root/.cache/calamares/session.log 2>/dev/null || true",
+                    timeout=60,
+                    check=False,
+                )
+                raise Failure(
+                    "Calamares reported an installation failure; session log tail:\n"
+                    + "\n".join(tail.splitlines()[-40:])
+                )
+            if attempt % 8 == 0:
+                # Keep one screenshot every couple of minutes as evidence.
+                self.vnc.wake()
+                image = self.vnc.capture(f"07-progress-{attempt:02d}.png")
+                text = re.sub(r"\s+", " ", self.ocr_text(image).lower())
+                if any(
+                    x in text
+                    for x in [
+                        "all done",
+                        "installation complete",
+                        "installation finished",
+                        "install complete",
+                        "install finished",
+                        "your new system",
+                        "restart now",
+                        "reboot now",
+                    ]
+                ):
+                    self.vnc.capture("08-finished.png")
+                    self.log(f"Calamares reached the finished page: {text[-100:]}")
+                    return
+        self.vnc.wake()
         self.vnc.capture("08-timeout.png")
         raise Failure("timed out waiting for Calamares to finish")
 

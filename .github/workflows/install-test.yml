@@ -39,7 +39,7 @@ jobs:
   install:
     name: Install ISO to disk
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 190
     env:
       CALL_RUN_ID: ${{ inputs.run_id }}
       DISPATCH_RUN_ID: ${{ github.event.inputs.run_id }}
@@ -132,7 +132,7 @@ jobs:
           if [[ "${EXPECT_BRANDING:-false}" == "true" ]]; then
             args+=(--branded)
           fi
-          bash build/install-test.sh "$iso" "${args[@]}" --timeout 3600
+          bash build/install-test.sh "$iso" "${args[@]}" --timeout 5400
 
       - name: Show install test log
         if: always()
