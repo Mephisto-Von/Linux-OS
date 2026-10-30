@@ -173,6 +173,10 @@ grep -q 'os-release' "$REPO_ROOT/build/verify-iso.sh" \
     || fail "ISO verification does not check distribution branding"
 assert_file "$REPO_ROOT/build/install-test.py"
 assert_file "$REPO_ROOT/build/install-test.sh"
+# YAML flow sequences split on commas, so the console argument must stay quoted
+# or it reaches the installed kernel as two parameters (ttyS0 + 115200n8).
+grep -q '"console=ttyS0,115200n8"' "$REPO_ROOT/build/install-test.py" \
+    || fail "the install test overlay does not quote the serial console parameter"
 grep -q 'uses: ./.github/workflows/install-test.yml' "$REPO_ROOT/.github/workflows/build-iso-hosted.yml" \
     || fail "the hosted ISO build does not run the install test"
 if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then

@@ -722,7 +722,9 @@ class InstallerTest:
             "overwrite: false\n"
             "keep_distributor: false\n"
             "prefer_grub_d: false\n"
-            "kernel_params: [ quiet, console=ttyS0,115200n8 ]\n",
+            # Quote the console argument: YAML flow sequences split on commas,
+            # which turned it into two kernel arguments (ttyS0 + 115200n8).
+            'kernel_params: [ quiet, "console=ttyS0,115200n8" ]\n',
         )
         self.serial.write_file(
             "/etc/calamares/modules/locale.conf",
@@ -965,7 +967,11 @@ class InstallerTest:
             ("findmnt -n -o FSTYPE /", "root filesystem"),
             ("stat -c '%U' /home/samurai", "home owner"),
             ("cat /proc/cmdline", "kernel command line"),
-            ("grep -E 'Samurai Linux|console=ttyS0' /boot/grub/grub.cfg | head -n 10", "installed GRUB"),
+            (
+                "sudo grep -E 'Samurai Linux|console=ttyS0' /boot/grub/grub.cfg "
+                "| head -n 10",
+                "installed GRUB",
+            ),
             ("cat /etc/default/grub", "grub defaults"),
             ("test -s /usr/share/samurai/boot/grub-splash.png && echo present || echo missing", "GRUB splash"),
             ("cat /etc/motd", "motd"),
